@@ -46,11 +46,20 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "blob:", "*"],
-      mediaSrc: ["'self'", "blob:", "*"],
+      mediaSrc: ["'self'", "blob:", "*", "https://*.architecturenext.in", "https://*.youtube.com", "https://*.googlevideo.com"],
       connectSrc: ["'self'", "*"],
+      frameSrc: ["'self'", "*", "https://*.youtube.com", "https://*.youtube-nocookie.com"],
+      frameAncestors: [
+        "'self'",
+        "https://*.architecturenext.in",
+        "https://architecturenext.in",
+        "https://*.vercel.app",
+        "http://localhost:*",
+        "http://127.0.0.1:*",
+      ],
     }
   },
-  frameguard: { action: "sameorigin" },
+  frameguard: false,
 }));
 
 const publicDir = path.resolve(__dirname, "../public");
