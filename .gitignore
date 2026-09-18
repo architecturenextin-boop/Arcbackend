@@ -1,0 +1,19 @@
+# Logs
+logs
+*.log
+
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Uploads
+uploads/videos/*
+!uploads/videos/.gitkeep
+uploads/documents/*
+!uploads/documents/.gitkeep
+uploads/images/*
+!uploads/images/.gitkeep

@@ -1,0 +1,256 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model User {
+  id                     String           @id @default(uuid()) @db.Uuid
+  email                  String           @unique
+  password_hash          String
+  first_name             String?
+  last_name              String?
+  full_name              String?
+  username               String?          @unique
+  phone                  String?
+  goal                   String?
+  role                   Role             @default(STUDENT)
+  is_verified            Boolean          @default(false)
+  onboarded              Boolean          @default(false)
+  avatar_url             String?
+  reset_password_token   String?
+  reset_password_expires DateTime?
+  created_at             DateTime         @default(now())
+  updated_at             DateTime         @updatedAt
+
+  payments               Payment[]
+  enrollments            Enrollment[]
+  progress               LessonProgress[]
+  otps                   Otp[]
+  password_reset_tokens  PasswordResetToken[]
+
+  @@map("users")
+  @@index([email])
+  @@index([role])
+}
+
+model Course {
+  id                  String           @id @default(uuid()) @db.Uuid
+  slug                String           @unique
+  title               String
+  tagline             String?
+  description         String?          @db.Text
+  cover_url           String?
+  thumbnail_url       String?
+  price               Int              @default(0)
+  original_price      Int              @default(0)
+  currency            String           @default("₹")
+  total_duration      String?
+  total_lessons       Int              @default(0)
+  level               String?          @default("Beginner")
+  language            String?          @default("Malayalam")
+  rating              Float?           @default(4.9)
+  review_count        Int              @default(0)
+  preview_video_url   String?
+  what_you_will_learn String[]         @default([])
+  tools_covered       String[]         @default([])
+  highlights          String[]         @default([])
+  requirements        String[]         @default([])
+  target_audience     String[]         @default([])
+  published           Boolean          @default(false)
+  status              CourseStatus     @default(DRAFT)
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
+
+  modules             CourseModule[]
+  payments            Payment[]
+  enrollments         Enrollment[]
+  progress            LessonProgress[]
+
+  @@map("courses")
+  @@index([slug])
+  @@index([status])
+  @@index([published])
+}
+
+model CourseModule {
+  id          String         @id @default(uuid()) @db.Uuid
+  course_id   String         @db.Uuid
+  title       String
+  description String?        @db.Text
+  sort_order  Int            @default(0)
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  course      Course         @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  lessons     CourseLesson[]
+
+  @@map("course_modules")
+  @@index([course_id])
+  @@index([sort_order])
+}
+
+model CourseLesson {
+  id          String           @id @default(uuid()) @db.Uuid
+  module_id   String           @db.Uuid
+  title       String
+  description String?          @db.Text
+  duration    String?          @default("15:00")
+  video_url   String?
+  video_path  String?
+  pdf_url     String?
+  pdf_path    String?
+  is_free     Boolean          @default(false)
+  sort_order  Int              @default(0)
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+
+  module      CourseModule     @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  progress    LessonProgress[]
+
+  @@map("course_lessons")
+  @@index([module_id])
+  @@index([sort_order])
+}
+
+model Payment {
+  id                 String        @id @default(uuid()) @db.Uuid
+  user_id            String        @db.Uuid
+  course_id          String        @db.Uuid
+  amount             Int
+  currency           String        @default("INR")
+  gateway            String?       @default("razorpay")
+  gateway_order_id   String?
+  gateway_payment_id String?
+  status             PaymentStatus @default(PENDING)
+  paid_at            DateTime?
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  user               User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course             Course        @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  enrollments        Enrollment[]
+
+  @@map("payments")
+  @@index([user_id])
+  @@index([course_id])
+  @@index([status])
+  @@index([gateway_order_id])
+}
+
+model Enrollment {
+  id          String           @id @default(uuid()) @db.Uuid
+  user_id     String           @db.Uuid
+  course_id   String           @db.Uuid
+  payment_id  String?          @db.Uuid
+  status      EnrollmentStatus @default(ACTIVE)
+  enrolled_at DateTime         @default(now())
+  expires_at  DateTime?
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+
+  user        User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course      Course           @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  payment     Payment?         @relation(fields: [payment_id], references: [id], onDelete: SetNull)
+
+  @@unique([user_id, course_id])
+  @@map("enrollments")
+  @@index([user_id])
+  @@index([course_id])
+  @@index([status])
+}
+
+model LessonProgress {
+  id               String       @id @default(uuid()) @db.Uuid
+  user_id          String       @db.Uuid
+  course_id        String       @db.Uuid
+  lesson_id        String       @db.Uuid
+  progress_seconds Int          @default(0)
+  completed        Boolean      @default(true)
+  last_watched_at  DateTime     @default(now())
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+
+  user             User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course           Course       @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  lesson           CourseLesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, lesson_id])
+  @@map("lesson_progress")
+  @@index([user_id])
+  @@index([course_id])
+  @@index([lesson_id])
+}
+
+enum OtpPurpose {
+  SIGNUP_VERIFY
+  PASSWORD_RESET
+}
+
+model Otp {
+  id         String     @id @default(uuid()) @db.Uuid
+  user_id    String     @db.Uuid
+  otp_hash   String
+  purpose    OtpPurpose
+  attempts   Int        @default(0)
+  expires_at DateTime
+  created_at DateTime   @default(now())
+
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("otps")
+  @@index([user_id, purpose])
+  @@index([expires_at])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token_hash String   @unique
+  consumed   Boolean  @default(false)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model TokenBlacklist {
+  id         String   @id @default(uuid()) @db.Uuid
+  token_hash String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@map("token_blacklist")
+  @@index([expires_at])
+}
