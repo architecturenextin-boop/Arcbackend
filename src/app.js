@@ -53,6 +53,12 @@ app.use(helmet({
   frameguard: { action: "sameorigin" },
 }));
 
+const publicDir = path.resolve(__dirname, "../public");
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.use("/public", express.static(publicDir));
+}
+
 // Restrict static uploads: Only public images (covers, avatars) are served directly.
 app.use("/uploads/images", express.static(imageUploadDir));
 
