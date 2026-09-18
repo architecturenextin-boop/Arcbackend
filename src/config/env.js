@@ -14,9 +14,10 @@ if (!process.env.DATABASE_URL && databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
 }
 
-const jwtSecret = 
-  process.env.JWT_SECRET || 
-  "skillspring-super-secure-jwt-secret-key-2026-production-ready";
+const jwtSecret = process.env.JWT_SECRET || "skillspring-super-secure-jwt-secret-key-2026-production-ready";
+if (!process.env.JWT_SECRET && nodeEnv === "production") {
+  console.warn("[SECURITY WARNING] JWT_SECRET is not set in production environment variables. Using fallback key.");
+}
 
 export const config = {
   port: parseInt(process.env.PORT || "5000", 10),

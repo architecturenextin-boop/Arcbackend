@@ -56,8 +56,8 @@ export async function sendEmail({ to, subject, html, text }) {
   const from = (process.env.SMTP_FROM || config.smtpFrom || "").trim() || 
     (user ? `"ArchitectureNext" <${user}>` : '"ArchitectureNext" <noreply@architecturenext.in>');
 
+  const mailer = getMailer();
   try {
-    const mailer = getMailer();
     const info = await mailer.sendMail({
       from,
       to,
@@ -69,7 +69,11 @@ export async function sendEmail({ to, subject, html, text }) {
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error(`[MAILER ERROR] Failed to send email to ${to}:`, error.message);
-    return { success: false, error: error.message };
+    const err = new Error("Failed to deliver verification email. Please check your email address or try again later.");
+    err.statusCode = 502;
+    err.code = "EMAIL_DELIVERY_FAILED";
+    err.originalError = error.message;
+    throw err;
   }
 }
 
