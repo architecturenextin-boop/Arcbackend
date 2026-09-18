@@ -17,3 +17,6 @@ uploads/documents/*
 !uploads/documents/.gitkeep
 uploads/images/*
 !uploads/images/.gitkeep
+
+# Playwright & test artifacts
+.playwright-mcp/
