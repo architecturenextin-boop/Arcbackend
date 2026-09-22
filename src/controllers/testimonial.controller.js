@@ -113,4 +113,27 @@ export const testimonialController = {
       next(err);
     }
   },
+
+  /**
+   * Admin: Create a testimonial directly
+   * POST /api/v1/admin/testimonials
+   */
+  async createAdminTestimonial(req, res, next) {
+    try {
+      const { name, email, quote, rating, courseId, status, avatarUrl } = req.body;
+      const data = await testimonialService.createAdminTestimonial(req.user.id, {
+        name,
+        email,
+        quote,
+        rating,
+        courseId,
+        status,
+        avatarUrl,
+      });
+      return successResponse(res, data, "Testimonial created successfully", 201);
+    } catch (err) {
+      next(err);
+    }
+  },
 };
+

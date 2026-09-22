@@ -372,4 +372,135 @@ export const testimonialService = {
 
     return { message: "Testimonial deleted successfully" };
   },
+
+  /**
+   * Admin: Create a testimonial directly
+   */
+  async createAdminTestimonial(adminUserId, { name, email, quote, rating = 5, courseId, status = "APPROVED", avatarUrl } = {}) {
+    const cleanQuote = (quote || "").trim();
+    if (!cleanQuote || cleanQuote.length < 5) {
+      const err = new Error("Testimonial must be at least 5 characters long");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const numRating = Math.min(5, Math.max(1, Number(rating) || 5));
+
+    let targetUserId = null;
+
+    if (email && email.trim()) {
+      const cleanEmail = email.trim().toLowerCase();
+      let user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: cleanEmail,
+            password_hash: "UNUSABLE_ACCOUNT_PLACEHOLDER_HASH",
+            full_name: name?.trim() || "Student",
+            role: "STUDENT",
+            is_verified: true,
+            onboarded: true,
+            avatar_url: avatarUrl || null,
+          },
+        });
+      } else if (name && !user.full_name) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { full_name: name.trim() },
+        });
+      }
+      targetUserId = user.id;
+    } else if (name && name.trim()) {
+      const cleanName = name.trim();
+      // Look for existing user with identical name or create placeholder
+      let user = await prisma.user.findFirst({
+        where: { full_name: cleanName },
+      });
+      if (!user) {
+        const slug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const generatedEmail = `${slug || "student"}_${Date.now()}@architecturenext.in`;
+        user = await prisma.user.create({
+          data: {
+            email: generatedEmail,
+            password_hash: "UNUSABLE_ACCOUNT_PLACEHOLDER_HASH",
+            full_name: cleanName,
+            role: "STUDENT",
+            is_verified: true,
+            onboarded: true,
+            avatar_url: avatarUrl || null,
+          },
+        });
+      }
+      targetUserId = user.id;
+    } else {
+
+      targetUserId = adminUserId;
+    }
+
+    // Resolve courseId if provided
+    let resolvedCourseId = null;
+    if (courseId) {
+      const course = await prisma.course.findFirst({
+        where: {
+          OR: [{ id: courseId }, { slug: courseId }],
+        },
+      });
+      if (course) {
+        resolvedCourseId = course.id;
+      }
+    }
+
+    const isApproved = (status || "").toUpperCase() === "APPROVED" || status === true;
+
+    const created = await prisma.testimonial.create({
+      data: {
+        user_id: targetUserId,
+        course_id: resolvedCourseId,
+        quote: cleanQuote,
+        rating: numRating,
+        status: isApproved ? "APPROVED" : "PENDING",
+        approved_at: isApproved ? new Date() : null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            avatar_url: true,
+          },
+        },
+        course: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+          },
+        },
+      },
+    });
+
+    return {
+      id: created.id,
+      quote: created.quote,
+      rating: created.rating,
+      status: created.status,
+      createdAt: created.created_at,
+      approvedAt: created.approved_at,
+      user: {
+        id: created.user.id,
+        name: created.user.full_name || "Student",
+        email: created.user.email,
+        avatarUrl: created.user.avatar_url,
+      },
+      course: created.course
+        ? {
+            id: created.course.id,
+            title: created.course.title,
+            slug: created.course.slug,
+          }
+        : null,
+    };
+  },
 };
+

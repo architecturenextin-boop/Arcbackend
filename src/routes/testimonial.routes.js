@@ -15,6 +15,7 @@ router.delete("/:id", requireAuth, testimonialController.deleteMyTestimonial);
 
 // 3. Admin protected endpoints
 router.get("/admin/list", requireAuth, requireAdmin, testimonialController.getAdminTestimonials);
+router.post("/admin", requireAuth, requireAdmin, testimonialController.createAdminTestimonial);
 router.patch("/admin/:id/approve", requireAuth, requireAdmin, testimonialController.approveTestimonial);
 router.patch("/admin/:id/reject", requireAuth, requireAdmin, testimonialController.rejectTestimonial);
 router.delete("/admin/:id", requireAuth, requireAdmin, testimonialController.deleteAdminTestimonial);

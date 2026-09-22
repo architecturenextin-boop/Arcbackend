@@ -39,6 +39,7 @@ router.get("/payments", AdminController.getAllPayments);
 
 // Testimonials Management
 router.get("/testimonials", testimonialController.getAdminTestimonials);
+router.post("/testimonials", testimonialController.createAdminTestimonial);
 router.patch("/testimonials/:id/approve", testimonialController.approveTestimonial);
 router.patch("/testimonials/:id/reject", testimonialController.rejectTestimonial);
 router.delete("/testimonials/:id", testimonialController.deleteAdminTestimonial);
