@@ -81,54 +81,58 @@ function renderEmailTemplate({ title, subtitle, otp, expiryMinutes = 5, note }) 
 
 export class EmailService {
   /**
-   * Signup Verification OTP email
+   * Fire-and-forget Signup Verification OTP email
    */
-  static async sendSignupOtpEmail(email, rawOtp, name = "Learner") {
-    try {
-      const subject = `Your verification code is ${rawOtp} — ArchitectureNext`;
-      const html = renderEmailTemplate({
-        title: `Verify your email, ${name}!`,
-        subtitle: `Thank you for creating an account with ArchitectureNext. Please enter the 6-digit verification code below to complete your registration.`,
-        otp: rawOtp,
-        expiryMinutes: 5,
-        note: `Enter this code on the verification screen to activate your account and start learning.`,
-      });
+  static sendSignupOtpEmail(email, rawOtp, name = "Learner") {
+    // Non-blocking fire and forget
+    setImmediate(async () => {
+      try {
+        const subject = `Your verification code is ${rawOtp} — ArchitectureNext`;
+        const html = renderEmailTemplate({
+          title: `Verify your email, ${name}!`,
+          subtitle: `Thank you for creating an account with ArchitectureNext. Please enter the 6-digit verification code below to complete your registration.`,
+          otp: rawOtp,
+          expiryMinutes: 5,
+          note: `Enter this code on the verification screen to activate your account and start learning.`,
+        });
 
-      return await sendEmail({
-        to: email,
-        subject,
-        html,
-        text: `Your ArchitectureNext verification code is: ${rawOtp} (valid for 5 minutes).`,
-      });
-    } catch (err) {
-      console.error(`[EMAIL ERROR] Failed to send signup OTP to ${email}:`, err.message);
-      return { success: false, error: err.message };
-    }
+        await sendEmail({
+          to: email,
+          subject,
+          html,
+          text: `Your ArchitectureNext verification code is: ${rawOtp} (valid for 5 minutes).`,
+        });
+      } catch (err) {
+        console.error(`[EMAIL ERROR] Failed to send signup OTP to ${email}:`, err.message);
+      }
+    });
   }
 
   /**
-   * Password Reset OTP email
+   * Fire-and-forget Password Reset OTP email
    */
-  static async sendPasswordResetOtpEmail(email, rawOtp, name = "Learner") {
-    try {
-      const subject = `Password reset code: ${rawOtp} — ArchitectureNext`;
-      const html = renderEmailTemplate({
-        title: `Reset your password`,
-        subtitle: `Hello ${name}, we received a request to reset the password for your ArchitectureNext account. Use the code below to proceed with resetting your password.`,
-        otp: rawOtp,
-        expiryMinutes: 5,
-        note: `This code will expire in 5 minutes. If you did not make this request, please change your password immediately or contact support.`,
-      });
+  static sendPasswordResetOtpEmail(email, rawOtp, name = "Learner") {
+    // Non-blocking fire and forget
+    setImmediate(async () => {
+      try {
+        const subject = `Password reset code: ${rawOtp} — ArchitectureNext`;
+        const html = renderEmailTemplate({
+          title: `Reset your password`,
+          subtitle: `Hello ${name}, we received a request to reset the password for your ArchitectureNext account. Use the code below to proceed with resetting your password.`,
+          otp: rawOtp,
+          expiryMinutes: 5,
+          note: `This code will expire in 5 minutes. If you did not make this request, please change your password immediately or contact support.`,
+        });
 
-      return await sendEmail({
-        to: email,
-        subject,
-        html,
-        text: `Your ArchitectureNext password reset code is: ${rawOtp} (valid for 5 minutes).`,
-      });
-    } catch (err) {
-      console.error(`[EMAIL ERROR] Failed to send password reset OTP to ${email}:`, err.message);
-      return { success: false, error: err.message };
-    }
+        await sendEmail({
+          to: email,
+          subject,
+          html,
+          text: `Your ArchitectureNext password reset code is: ${rawOtp} (valid for 5 minutes).`,
+        });
+      } catch (err) {
+        console.error(`[EMAIL ERROR] Failed to send password reset OTP to ${email}:`, err.message);
+      }
+    });
   }
 }

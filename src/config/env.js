@@ -14,10 +14,9 @@ if (!process.env.DATABASE_URL && databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
 }
 
-const jwtSecret = process.env.JWT_SECRET || "skillspring-super-secure-jwt-secret-key-2026-production-ready";
-if (!process.env.JWT_SECRET && nodeEnv === "production") {
-  console.warn("[SECURITY WARNING] JWT_SECRET is not set in production environment variables. Using fallback key.");
-}
+const jwtSecret = 
+  process.env.JWT_SECRET || 
+  "skillspring-super-secure-jwt-secret-key-2026-production-ready";
 
 export const config = {
   port: parseInt(process.env.PORT || "5000", 10),
@@ -26,7 +25,6 @@ export const config = {
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
-  appUrl: process.env.APP_URL || process.env.BACKEND_URL || "",
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || "",
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || "",
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",

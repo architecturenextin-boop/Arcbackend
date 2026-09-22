@@ -1,6 +1,5 @@
 import { AdminService } from "../services/admin.service.js";
 import { successResponse } from "../utils/response.js";
-import { config } from "../config/env.js";
 import { z } from "zod";
 
 const upsertCourseSchema = z.object({
@@ -201,9 +200,7 @@ export class AdminController {
       }
 
       const filename = req.file.filename;
-      const baseUrl = config.appUrl 
-        ? config.appUrl.replace(/\/$/, "") 
-        : `${req.protocol}://${req.get("host")}`;
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
       const imageUrl = `${baseUrl}/uploads/images/${filename}`;
       const imagePath = `/uploads/images/${filename}`;
 

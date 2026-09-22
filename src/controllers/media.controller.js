@@ -95,6 +95,17 @@ export class MediaController {
         return res.status(404).json({ success: false, message: "Video file not found." });
       }
 
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: "Authentication required." });
+      }
+
+      const isAdmin = user.role === "ADMIN";
+
+      if (isAdmin) {
+        return streamFile(req, res, filePath, getContentType(cleanFilename));
+      }
+
       // 2. Identify the owning lesson
       const lesson = await prisma.courseLesson.findFirst({
         where: {
@@ -112,23 +123,13 @@ export class MediaController {
         },
       });
 
-      // 3. If lesson is free, allow public streaming
-      if (lesson && lesson.is_free) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
-
-      const user = req.user;
-      if (!user) {
-        return res.status(401).json({ success: false, message: "Authentication required to access this course video." });
-      }
-
-      const isAdmin = user.role === "ADMIN";
-      if (isAdmin) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
-
       if (!lesson) {
         return res.status(404).json({ success: false, message: "Lesson not found for this media." });
+      }
+
+      // 3. Authorization check
+      if (lesson.is_free) {
+        return streamFile(req, res, filePath, getContentType(cleanFilename));
       }
 
       const enrollment = await prisma.enrollment.findUnique({
@@ -168,6 +169,17 @@ export class MediaController {
         return res.status(404).json({ success: false, message: "Document file not found." });
       }
 
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: "Authentication required." });
+      }
+
+      const isAdmin = user.role === "ADMIN";
+
+      if (isAdmin) {
+        return streamFile(req, res, filePath, getContentType(cleanFilename));
+      }
+
       // 2. Identify the owning lesson
       const lesson = await prisma.courseLesson.findFirst({
         where: {
@@ -185,23 +197,13 @@ export class MediaController {
         },
       });
 
-      // 3. If lesson is free, allow public streaming
-      if (lesson && lesson.is_free) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
-
-      const user = req.user;
-      if (!user) {
-        return res.status(401).json({ success: false, message: "Authentication required to access this document." });
-      }
-
-      const isAdmin = user.role === "ADMIN";
-      if (isAdmin) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
-
       if (!lesson) {
         return res.status(404).json({ success: false, message: "Lesson not found for this document." });
+      }
+
+      // 3. Authorization check
+      if (lesson.is_free) {
+        return streamFile(req, res, filePath, getContentType(cleanFilename));
       }
 
       const enrollment = await prisma.enrollment.findUnique({

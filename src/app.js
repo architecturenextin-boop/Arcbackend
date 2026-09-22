@@ -18,9 +18,6 @@ const __dirname = path.dirname(__filename);
 // Razorpay & SMTP configuration active
 const app = express();
 
-// Trust reverse proxies (Nginx, Cloudflare, Vercel, Render) for accurate protocol & host detection
-app.set("trust proxy", 1);
-
 // Ensure upload directories exist safely in both local and serverless environments
 const isVercel = Boolean(process.env.VERCEL);
 const uploadDir = isVercel 
@@ -46,27 +43,12 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "blob:", "*"],
-      mediaSrc: ["'self'", "blob:", "*", "https://*.architecturenext.in", "https://*.youtube.com", "https://*.googlevideo.com"],
+      mediaSrc: ["'self'", "blob:", "*"],
       connectSrc: ["'self'", "*"],
-      frameSrc: ["'self'", "*", "https://*.youtube.com", "https://*.youtube-nocookie.com"],
-      frameAncestors: [
-        "'self'",
-        "https://*.architecturenext.in",
-        "https://architecturenext.in",
-        "https://*.vercel.app",
-        "http://localhost:*",
-        "http://127.0.0.1:*",
-      ],
     }
   },
-  frameguard: false,
+  frameguard: { action: "sameorigin" },
 }));
-
-const publicDir = path.resolve(__dirname, "../public");
-if (fs.existsSync(publicDir)) {
-  app.use(express.static(publicDir));
-  app.use("/public", express.static(publicDir));
-}
 
 // Restrict static uploads: Only public images (covers, avatars) are served directly.
 app.use("/uploads/images", express.static(imageUploadDir));
@@ -137,19 +119,7 @@ app.get("/healthz", (req, res) => {
 // Mount API v1 routes
 app.use("/api/v1", apiRoutes);
 
-// Serve frontend static build if hosted together in a single project
-const frontendDistDir = path.resolve(__dirname, "../../dist");
-if (fs.existsSync(frontendDistDir)) {
-  app.use(express.static(frontendDistDir));
-  app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) {
-      return next();
-    }
-    res.sendFile(path.join(frontendDistDir, "index.html"));
-  });
-}
-
-// Catch 404 for unmatched API routes
+// Catch 404
 app.use((req, res) => {
   res.status(404).json({
     success: false,

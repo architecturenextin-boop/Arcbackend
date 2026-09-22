@@ -83,8 +83,8 @@ export class AuthService {
     // Generate purpose-scoped signup OTP
     const { rawOtp } = await OtpService.createOtp(user.id, "SIGNUP_VERIFY");
 
-    // Await email sending to guarantee delivery before responding to client
-    await EmailService.sendSignupOtpEmail(
+    // Send asynchronous fire-and-forget verification email
+    EmailService.sendSignupOtpEmail(
       user.email,
       rawOtp,
       user.first_name || user.full_name || "Learner"
@@ -192,13 +192,13 @@ export class AuthService {
     const { rawOtp } = await OtpService.createOtp(user.id, purpose);
 
     if (purpose === "SIGNUP_VERIFY") {
-      await EmailService.sendSignupOtpEmail(
+      EmailService.sendSignupOtpEmail(
         user.email,
         rawOtp,
         user.first_name || user.full_name || "Learner"
       );
     } else if (purpose === "PASSWORD_RESET") {
-      await EmailService.sendPasswordResetOtpEmail(
+      EmailService.sendPasswordResetOtpEmail(
         user.email,
         rawOtp,
         user.first_name || user.full_name || "Learner"
@@ -226,17 +226,14 @@ export class AuthService {
     if (user) {
       try {
         const { rawOtp } = await OtpService.createOtp(user.id, "PASSWORD_RESET");
-        await EmailService.sendPasswordResetOtpEmail(
+        EmailService.sendPasswordResetOtpEmail(
           user.email,
           rawOtp,
           user.first_name || user.full_name || "Learner"
         );
       } catch (err) {
-        if (err.code === "OTP_COOLDOWN" || err.statusCode === 429) {
-          throw err;
-        }
-        console.error("[FORGOT_PASSWORD ERROR] Email delivery failed:", err.message);
-        throw err;
+        // If rate limit error, throw message
+        if (err.message.includes("wait")) throw err;
       }
     } else {
       // Fake work to maintain constant timing
@@ -341,14 +338,12 @@ export class AuthService {
     if (!user.is_verified) {
       try {
         const { rawOtp } = await OtpService.createOtp(user.id, "SIGNUP_VERIFY");
-        await EmailService.sendSignupOtpEmail(
+        EmailService.sendSignupOtpEmail(
           user.email,
           rawOtp,
           user.first_name || user.full_name || "Learner"
         );
-      } catch (err) {
-        console.error("[LOGIN_UNVERIFIED_OTP ERROR]:", err.message);
-      }
+      } catch (_) {}
 
       const error = new Error("Your email address is not verified yet. A new verification code has been sent to your email.");
       error.code = "UNVERIFIED_EMAIL";

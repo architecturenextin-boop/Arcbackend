@@ -6,32 +6,25 @@ let transporter = null;
 export function getMailer() {
   if (transporter) return transporter;
 
-  const host = (process.env.SMTP_HOST || config.smtpHost || "").trim();
+  const host = process.env.SMTP_HOST || config.smtpHost;
   const port = parseInt(process.env.SMTP_PORT || config.smtpPort || "587", 10);
-  const user = (process.env.SMTP_USER || config.smtpUser || "").trim();
-  const rawPass = (process.env.SMTP_PASS || config.smtpPass || "").trim();
-  // Strip all whitespace from app passwords (e.g. Gmail 16-char app passwords with spaces)
-  const pass = rawPass.replace(/\s+/g, "");
+  const user = process.env.SMTP_USER || config.smtpUser;
+  const pass = process.env.SMTP_PASS || config.smtpPass;
   const secure = process.env.SMTP_SECURE === "true" || port === 465;
 
-  if (user && pass) {
-    // If Gmail, using the built-in nodemailer 'gmail' service is most reliable
-    if (host.includes("gmail") || user.endsWith("@gmail.com")) {
-      transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: { user, pass },
-      });
-    } else {
-      transporter = nodemailer.createTransport({
-        host: host || "smtp.gmail.com",
-        port,
-        secure,
-        auth: { user, pass },
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
-    }
+  if (host && user && pass) {
+    transporter = nodemailer.createTransport({
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === "production",
+      },
+    });
   } else {
     // Development fallback mock transport
     transporter = {
@@ -52,12 +45,9 @@ export function getMailer() {
 }
 
 export async function sendEmail({ to, subject, html, text }) {
-  const user = (process.env.SMTP_USER || config.smtpUser || "").trim();
-  const from = (process.env.SMTP_FROM || config.smtpFrom || "").trim() || 
-    (user ? `"ArchitectureNext" <${user}>` : '"ArchitectureNext" <noreply@architecturenext.in>');
-
-  const mailer = getMailer();
+  const from = process.env.SMTP_FROM || '"ArchitectureNext" <noreply@architecturenext.in>';
   try {
+    const mailer = getMailer();
     const info = await mailer.sendMail({
       from,
       to,
@@ -65,15 +55,9 @@ export async function sendEmail({ to, subject, html, text }) {
       text: text || subject,
       html,
     });
-    console.log(`[MAILER SUCCESS] Email sent to ${to}: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error(`[MAILER ERROR] Failed to send email to ${to}:`, error.message);
-    const err = new Error("Failed to deliver verification email. Please check your email address or try again later.");
-    err.statusCode = 502;
-    err.code = "EMAIL_DELIVERY_FAILED";
-    err.originalError = error.message;
-    throw err;
+    return { success: false, error: error.message };
   }
 }
-

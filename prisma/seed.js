@@ -1,5 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
+
+dotenv.config({ path: "../.env" });
+dotenv.config();
 
 const prisma = new PrismaClient();
 
@@ -184,6 +188,66 @@ async function main() {
       status: "ACTIVE",
     }
   });
+
+  // 6. Seed Initial Approved Testimonials
+  const initialTestimonials = [
+    {
+      name: "Sanjay PV",
+      email: "sanjay.pv@example.com",
+      role: "Hands-On Learning Through Client Project Design",
+      quote:
+        "One of the standout features of this architecture institute is the focus on client project design. Students get hands-on experience working on real projects, which is invaluable for building a strong portfolio. The Applied Architecture Tools and Techniques course is particularly useful for mastering design software.",
+      rating: 5,
+    },
+    {
+      name: "Vishnu Kailas",
+      email: "vishnu.kailas@example.com",
+      role: "Architectural Learner",
+      quote:
+        "The curriculum is rigorous, but the rewards are worth it. The hands-on approach, combined with theoretical studies, prepares us well for the challenges of the architecture profession. The faculty are always approachable for guidance.",
+      rating: 5,
+    },
+    {
+      name: "Ajith KS",
+      email: "ajith.ks@example.com",
+      role: "Architecture Next Alumnus",
+      quote:
+        "I had an incredible experience at Architecture Next. The faculty and staff were supportive and knowledgeable, and the resources available to students were top-notch. I was challenged academically and personally, and I grew so much as a result of my time here. The campus community was welcoming and inclusive, and I made lifelong friends and connections.",
+      rating: 5,
+    },
+  ];
+
+  for (const t of initialTestimonials) {
+    const user = await prisma.user.upsert({
+      where: { email: t.email },
+      update: {},
+      create: {
+        email: t.email,
+        password_hash: studentPasswordHash,
+        full_name: t.name,
+        role: "STUDENT",
+        is_verified: true,
+        onboarded: true,
+      },
+    });
+
+    const existingTestimonial = await prisma.testimonial.findFirst({
+      where: { user_id: user.id },
+    });
+
+    if (!existingTestimonial) {
+      await prisma.testimonial.create({
+        data: {
+          user_id: user.id,
+          course_id: architectureCourse.id,
+          quote: t.quote,
+          rating: t.rating,
+          status: "APPROVED",
+          approved_at: new Date(),
+        },
+      });
+    }
+  }
 
   console.log(" Seed completed successfully!");
 }

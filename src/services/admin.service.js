@@ -1,5 +1,4 @@
 import { prisma } from "../config/db.js";
-import { formatCourseMedia } from "../utils/media.js";
 
 export class AdminService {
   static async getOverviewStats() {
@@ -77,7 +76,7 @@ export class AdminService {
       },
       orderBy: { created_at: "desc" },
     });
-    return courses.map((c) => formatCourseMedia(c));
+    return courses;
   }
 
   static async upsertCourse({ courseData, modulesData }) {

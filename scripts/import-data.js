@@ -8,12 +8,9 @@ const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient();
 
 async function importAll() {
-  let jsonPath = path.resolve(__dirname, "../backups/latest_backup.json");
+  const jsonPath = path.resolve(__dirname, "../backups/export-data.json");
   if (!fs.existsSync(jsonPath)) {
-    jsonPath = path.resolve(__dirname, "../backups/export-data.json");
-  }
-  if (!fs.existsSync(jsonPath)) {
-    console.error(`❌ Backup file not found in backups directory.`);
+    console.error(`❌ Export file not found at ${jsonPath}. Run 'npm run export:data' first.`);
     process.exit(1);
   }
 
@@ -48,10 +45,9 @@ async function importAll() {
     }
 
     // 3. Modules
-    const modules = data.courseModules || data.course_modules || [];
-    if (modules.length) {
-      console.log(`Importing ${modules.length} modules...`);
-      for (const m of modules) {
+    if (data.course_modules?.length) {
+      console.log(`Importing ${data.course_modules.length} modules...`);
+      for (const m of data.course_modules) {
         await prisma.courseModule.upsert({
           where: { id: m.id },
           update: m,
@@ -61,10 +57,9 @@ async function importAll() {
     }
 
     // 4. Lessons
-    const lessons = data.courseLessons || data.course_lessons || [];
-    if (lessons.length) {
-      console.log(`Importing ${lessons.length} lessons...`);
-      for (const l of lessons) {
+    if (data.course_lessons?.length) {
+      console.log(`Importing ${data.course_lessons.length} lessons...`);
+      for (const l of data.course_lessons) {
         await prisma.courseLesson.upsert({
           where: { id: l.id },
           update: l,
@@ -98,10 +93,9 @@ async function importAll() {
     }
 
     // 7. Lesson Progress
-    const progress = data.lessonProgress || data.lesson_progress || [];
-    if (progress.length) {
-      console.log(`Importing ${progress.length} progress records...`);
-      for (const lp of progress) {
+    if (data.lesson_progress?.length) {
+      console.log(`Importing ${data.lesson_progress.length} progress records...`);
+      for (const lp of data.lesson_progress) {
         await prisma.lessonProgress.upsert({
           where: { id: lp.id },
           update: lp,

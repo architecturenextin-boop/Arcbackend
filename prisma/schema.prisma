@@ -53,6 +53,7 @@ model User {
   payments               Payment[]
   enrollments            Enrollment[]
   progress               LessonProgress[]
+  testimonials           Testimonial[]
   otps                   Otp[]
   password_reset_tokens  PasswordResetToken[]
 
@@ -93,6 +94,7 @@ model Course {
   payments            Payment[]
   enrollments         Enrollment[]
   progress            LessonProgress[]
+  testimonials        Testimonial[]
 
   @@map("courses")
   @@index([slug])
@@ -254,3 +256,33 @@ model TokenBlacklist {
   @@map("token_blacklist")
   @@index([expires_at])
 }
+
+enum TestimonialStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Testimonial {
+  id          String            @id @default(uuid()) @db.Uuid
+  user_id     String            @db.Uuid
+  course_id   String?           @db.Uuid
+  quote       String            @db.Text
+  rating      Int               @default(5)
+  status      TestimonialStatus @default(PENDING)
+  admin_note  String?           @db.Text
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @updatedAt
+  approved_at DateTime?
+  rejected_at DateTime?
+
+  user        User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course      Course?           @relation(fields: [course_id], references: [id], onDelete: SetNull)
+
+  @@map("testimonials")
+  @@index([status])
+  @@index([user_id])
+  @@index([course_id])
+  @@index([created_at])
+}
+

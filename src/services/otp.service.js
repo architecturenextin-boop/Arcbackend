@@ -51,8 +51,6 @@ export class OtpService {
       );
       const err = new Error(`Please wait ${waitSeconds}s before requesting a new verification code.`);
       err.statusCode = 429;
-      err.code = "OTP_COOLDOWN";
-      err.waitSeconds = waitSeconds;
       throw err;
     }
 

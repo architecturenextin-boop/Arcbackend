@@ -1,5 +1,4 @@
 import { prisma } from "../config/db.js";
-import { formatMediaUrl } from "../utils/media.js";
 
 export class DashboardService {
   static async getMyCourses(userId) {
@@ -62,7 +61,7 @@ export class DashboardService {
         slug: c.slug,
         title: c.title,
         tagline: c.tagline,
-        cover_url: formatMediaUrl(c.cover_url),
+        cover_url: c.cover_url,
         total_lessons: totalLessons || c.total_lessons,
         total_duration: c.total_duration,
         level: c.level,
@@ -99,7 +98,7 @@ export class DashboardService {
       course_id: p.course_id,
       course_title: p.course?.title || "Course Access",
       course_slug: p.course?.slug || "",
-      cover_url: formatMediaUrl(p.course?.cover_url || ""),
+      cover_url: p.course?.cover_url || "",
       amount: p.amount,
       currency: p.currency || "₹",
       gateway: p.gateway || "razorpay",

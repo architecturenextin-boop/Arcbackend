@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AdminController } from "../controllers/admin.controller.js";
+import { testimonialController } from "../controllers/testimonial.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { requireAdmin } from "../middlewares/rbac.middleware.js";
 import { 
@@ -35,5 +36,11 @@ router.put("/students/:id/role", AdminController.updateStudentRole);
 
 // Payments & Transactions
 router.get("/payments", AdminController.getAllPayments);
+
+// Testimonials Management
+router.get("/testimonials", testimonialController.getAdminTestimonials);
+router.patch("/testimonials/:id/approve", testimonialController.approveTestimonial);
+router.patch("/testimonials/:id/reject", testimonialController.rejectTestimonial);
+router.delete("/testimonials/:id", testimonialController.deleteAdminTestimonial);
 
 export default router;
