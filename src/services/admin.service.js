@@ -1,69 +1,164 @@
+import crypto from "crypto";
+import path from "path";
 import { prisma } from "../config/db.js";
+import { r2Service } from "./r2.service.js";
+
+/**
+ * Extracts the canonical Cloudflare R2 object key from any media URL or database path.
+ */
+function getR2Key(urlOrPath, defaultFolder = "videos") {
+  if (!urlOrPath || typeof urlOrPath !== "string") return null;
+
+  // Do not delete third-party external URLs (YouTube, Vimeo, etc.)
+  if (
+    urlOrPath.includes("youtube.com") ||
+    urlOrPath.includes("youtu.be") ||
+    urlOrPath.includes("vimeo.com") ||
+    urlOrPath.includes("google.com") ||
+    urlOrPath.includes("cloudinary.com")
+  ) {
+    return null;
+  }
+
+  // Extract clean filename without query string parameters
+  const cleanFilename = path.basename(urlOrPath.split("?")[0]);
+  if (!cleanFilename || cleanFilename === "." || cleanFilename.length < 3) return null;
+
+  // Preserve folder hierarchy or categorize by file extension
+  if (
+    cleanFilename.endsWith(".mp4") ||
+    cleanFilename.endsWith(".webm") ||
+    cleanFilename.endsWith(".mov") ||
+    cleanFilename.endsWith(".mkv") ||
+    cleanFilename.endsWith(".m4v")
+  ) {
+    return `videos/${cleanFilename}`;
+  }
+
+  if (
+    cleanFilename.endsWith(".pdf") ||
+    cleanFilename.endsWith(".psd") ||
+    cleanFilename.endsWith(".dwg") ||
+    cleanFilename.endsWith(".mp3") ||
+    cleanFilename.endsWith(".wav") ||
+    cleanFilename.endsWith(".zip") ||
+    cleanFilename.endsWith(".rar")
+  ) {
+    return `documents/${cleanFilename}`;
+  }
+
+  if (
+    cleanFilename.endsWith(".png") ||
+    cleanFilename.endsWith(".jpg") ||
+    cleanFilename.endsWith(".jpeg") ||
+    cleanFilename.endsWith(".webp") ||
+    cleanFilename.endsWith(".svg")
+  ) {
+    return `images/${cleanFilename}`;
+  }
+
+  return `${defaultFolder}/${cleanFilename}`;
+}
+
+/**
+ * Safely deletes an object from Cloudflare R2 if configured.
+ */
+async function safeDeleteR2Media(urlOrPath, defaultFolder = "videos") {
+  if (!urlOrPath) return;
+  const key = getR2Key(urlOrPath, defaultFolder);
+  if (!key) return;
+
+  if (r2Service.isConfigured()) {
+    try {
+      console.log(`[Cloudflare R2 Auto-Cleanup] Deleting replaced/deleted file: ${key}`);
+      await r2Service.deleteObject({ key });
+    } catch (err) {
+      console.warn(`[Cloudflare R2 Auto-Cleanup Warning] Could not delete ${key}:`, err.message);
+    }
+  }
+}
 
 export class AdminService {
   static async getOverviewStats() {
     const [
       totalUsers,
-      activeEnrollmentsGroup,
-      revenueResult,
-      completedPaymentsCount,
+      totalStudents,
       totalCourses,
-      recentPayments
+      publishedCourses,
+      totalEnrollments,
+      payments,
+      recentUsers,
+      recentEnrollments,
     ] = await Promise.all([
       prisma.user.count(),
-      prisma.enrollment.groupBy({
-        by: ["user_id"],
-        where: { status: "ACTIVE" },
-      }),
-      prisma.payment.aggregate({
-        where: { status: "COMPLETED" },
-        _sum: { amount: true },
-      }),
-      prisma.payment.count({
-        where: { status: "COMPLETED" },
-      }),
+      prisma.user.count({ where: { role: "STUDENT" } }),
       prisma.course.count(),
+      prisma.course.count({ where: { published: true } }),
+      prisma.enrollment.count({ where: { status: "ACTIVE" } }),
       prisma.payment.findMany({
+        where: { status: "CAPTURED" },
+        select: { amount: true },
+      }),
+      prisma.user.findMany({
         take: 5,
         orderBy: { created_at: "desc" },
+        select: {
+          id: true,
+          email: true,
+          full_name: true,
+          first_name: true,
+          last_name: true,
+          role: true,
+          created_at: true,
+          avatar_url: true,
+        },
+      }),
+      prisma.enrollment.findMany({
+        take: 5,
+        orderBy: { enrolled_at: "desc" },
         include: {
           user: {
-            select: { id: true, full_name: true, email: true },
+            select: {
+              id: true,
+              email: true,
+              full_name: true,
+              first_name: true,
+              last_name: true,
+              avatar_url: true,
+            },
           },
           course: {
-            select: { id: true, title: true },
+            select: {
+              id: true,
+              title: true,
+              price: true,
+              cover_url: true,
+            },
           },
         },
       }),
     ]);
 
-    const enrolledStudentsCount = activeEnrollmentsGroup.length;
-
-    const totalRevenue = revenueResult._sum.amount ?? 0;
-
-    const formattedRecent = recentPayments.map((p) => ({
-      id: p.id,
-      amount: p.amount,
-      currency: p.currency,
-      status: p.status.toLowerCase(),
-      studentName: p.user?.full_name || p.user?.email || "Learner",
-      courseTitle: p.course?.title || "Course Access",
-      orderId: p.gateway_order_id || p.id.substring(0, 10),
-      created_at: p.created_at,
-    }));
+    const totalRevenue = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     return {
-      profileCount: totalUsers,
-      enrolledStudentsCount,
-      totalPaymentsCount: completedPaymentsCount,
-      totalRevenue,
-      courseCount: totalCourses,
-      recent: formattedRecent,
+      stats: {
+        totalUsers,
+        totalStudents,
+        totalCourses,
+        publishedCourses,
+        totalEnrollments,
+        totalRevenue,
+      },
+      recentUsers,
+      recentEnrollments,
     };
   }
 
-  static async getAllCourses() {
-    const courses = await prisma.course.findMany({
+  static async getAllCourses({ page, limit } = {}) {
+    const total = await prisma.course.count();
+
+    const query = {
       include: {
         modules: {
           orderBy: { sort_order: "asc" },
@@ -73,10 +168,22 @@ export class AdminService {
             },
           },
         },
+        _count: {
+          select: {
+            enrollments: true,
+          },
+        },
       },
       orderBy: { created_at: "desc" },
-    });
-    return courses;
+    };
+
+    if (page && limit) {
+      query.skip = (page - 1) * limit;
+      query.take = limit;
+    }
+
+    const courses = await prisma.course.findMany(query);
+    return { courses, total };
   }
 
   static async upsertCourse({ courseData, modulesData }) {
@@ -173,6 +280,26 @@ export class AdminService {
               incomingLessonIds.push(lessonId);
               totalLessonCount += 1;
 
+              // Check existing lesson to detect if video or document is being replaced
+              const existingLesson = await tx.courseLesson.findUnique({
+                where: { id: lessonId },
+                select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true },
+              });
+
+              if (existingLesson) {
+                const oldVideo = existingLesson.video_url || existingLesson.video_path;
+                const newVideo = l.video_url || l.video_path;
+                if (oldVideo && newVideo && getR2Key(oldVideo, "videos") !== getR2Key(newVideo, "videos")) {
+                  safeDeleteR2Media(oldVideo, "videos");
+                }
+
+                const oldPdf = existingLesson.pdf_url || existingLesson.pdf_path;
+                const newPdf = l.pdf_url || l.pdf_path;
+                if (oldPdf && newPdf && getR2Key(oldPdf, "documents") !== getR2Key(newPdf, "documents")) {
+                  safeDeleteR2Media(oldPdf, "documents");
+                }
+              }
+
               await tx.courseLesson.upsert({
                 where: { id: lessonId },
                 create: {
@@ -202,7 +329,25 @@ export class AdminService {
               });
             }
 
-            // Remove lessons deleted from this module
+            // Find and automatically delete media files of removed lessons from Cloudflare R2
+            const removedLessons = await tx.courseLesson.findMany({
+              where: {
+                module_id: moduleId,
+                id: { notIn: incomingLessonIds },
+              },
+              select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true },
+            });
+
+            for (const rLesson of removedLessons) {
+              if (rLesson.video_url || rLesson.video_path) {
+                safeDeleteR2Media(rLesson.video_url || rLesson.video_path, "videos");
+              }
+              if (rLesson.pdf_url || rLesson.pdf_path) {
+                safeDeleteR2Media(rLesson.pdf_url || rLesson.pdf_path, "documents");
+              }
+            }
+
+            // Delete removed lessons from database
             await tx.courseLesson.deleteMany({
               where: {
                 module_id: moduleId,
@@ -212,7 +357,31 @@ export class AdminService {
           }
         }
 
-        // Remove modules deleted from this course
+        // Find and automatically delete media files of removed modules from Cloudflare R2
+        const removedModules = await tx.courseModule.findMany({
+          where: {
+            course_id: course.id,
+            id: { notIn: incomingModuleIds },
+          },
+          include: {
+            lessons: {
+              select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true },
+            },
+          },
+        });
+
+        for (const rModule of removedModules) {
+          for (const rLesson of rModule.lessons) {
+            if (rLesson.video_url || rLesson.video_path) {
+              safeDeleteR2Media(rLesson.video_url || rLesson.video_path, "videos");
+            }
+            if (rLesson.pdf_url || rLesson.pdf_path) {
+              safeDeleteR2Media(rLesson.pdf_url || rLesson.pdf_path, "documents");
+            }
+          }
+        }
+
+        // Remove deleted modules from database
         await tx.courseModule.deleteMany({
           where: {
             course_id: course.id,
@@ -232,6 +401,31 @@ export class AdminService {
   }
 
   static async deleteCourse(courseId) {
+    // 1. Fetch all lessons and attachments in this course to clean up from Cloudflare R2
+    const lessonsInCourse = await prisma.courseLesson.findMany({
+      where: {
+        module: {
+          course_id: courseId,
+        },
+      },
+      select: {
+        video_url: true,
+        video_path: true,
+        pdf_url: true,
+        pdf_path: true,
+      },
+    });
+
+    for (const l of lessonsInCourse) {
+      if (l.video_url || l.video_path) {
+        safeDeleteR2Media(l.video_url || l.video_path, "videos");
+      }
+      if (l.pdf_url || l.pdf_path) {
+        safeDeleteR2Media(l.pdf_url || l.pdf_path, "documents");
+      }
+    }
+
+    // 2. Delete course and cascading records from database
     return await prisma.course.delete({
       where: { id: courseId },
     });
