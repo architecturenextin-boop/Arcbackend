@@ -1,3 +1,5 @@
+import path from "path";
+import { r2Service } from "./r2.service.js";
 import { prisma } from "../config/db.js";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -123,31 +125,82 @@ export class CourseService {
     const progressMap = new Map(progressRecords.map((p) => [p.lesson_id, p]));
 
     // Sanitize lessons based on enrollment status
-    const securedModules = course.modules.map((m) => ({
-      ...m,
-      lessons: m.lessons.map((l) => {
-        const canAccessVideo = isEnrolled || l.is_free;
-        const progress = progressMap.get(l.id);
+    const securedModules = await Promise.all(
+      course.modules.map(async (m) => {
+        const securedLessons = await Promise.all(
+          m.lessons.map(async (l) => {
+            const canAccessVideo = isEnrolled || l.is_free;
+            const progress = progressMap.get(l.id);
+
+            let resolvedVideoUrl = null;
+            let resolvedPdfUrl = null;
+
+            if (canAccessVideo) {
+              const rawVideo = l.video_url || l.video_path;
+              if (rawVideo) {
+                if (rawVideo.startsWith("http://") || rawVideo.startsWith("https://")) {
+                  resolvedVideoUrl = rawVideo;
+                } else if (r2Service.isConfigured()) {
+                  const cleanFilename = path.basename(rawVideo.split("?")[0]);
+                  try {
+                    resolvedVideoUrl = await r2Service.getPresignedDownloadUrl({
+                      key: "videos/" + cleanFilename,
+                      expiresIn: 14400,
+                    });
+                  } catch (_) {
+                    resolvedVideoUrl = l.video_url;
+                  }
+                } else {
+                  resolvedVideoUrl = l.video_url;
+                }
+              }
+
+              const rawPdf = l.pdf_url || l.pdf_path;
+              if (rawPdf) {
+                if (rawPdf.startsWith("http://") || rawPdf.startsWith("https://")) {
+                  resolvedPdfUrl = rawPdf;
+                } else if (r2Service.isConfigured()) {
+                  const cleanFilename = path.basename(rawPdf.split("?")[0]);
+                  try {
+                    resolvedPdfUrl = await r2Service.getPresignedDownloadUrl({
+                      key: "documents/" + cleanFilename,
+                      expiresIn: 14400,
+                    });
+                  } catch (_) {
+                    resolvedPdfUrl = l.pdf_url;
+                  }
+                } else {
+                  resolvedPdfUrl = l.pdf_url;
+                }
+              }
+            }
+
+            return {
+              id: l.id,
+              module_id: l.module_id,
+              title: l.title,
+              description: l.description,
+              duration: l.duration,
+              sort_order: l.sort_order,
+              is_free: l.is_free,
+              can_access: canAccessVideo,
+              video_url: resolvedVideoUrl,
+              video_path: resolvedVideoUrl,
+              pdf_url: resolvedPdfUrl,
+              pdf_path: resolvedPdfUrl,
+              progress_seconds: progress ? progress.progress_seconds : 0,
+              completed: progress ? progress.completed : false,
+              last_watched_at: progress ? progress.last_watched_at : null,
+            };
+          })
+        );
 
         return {
-          id: l.id,
-          module_id: l.module_id,
-          title: l.title,
-          description: l.description,
-          duration: l.duration,
-          sort_order: l.sort_order,
-          is_free: l.is_free,
-          can_access: canAccessVideo,
-          video_url: canAccessVideo ? l.video_url : null,
-          video_path: canAccessVideo ? l.video_path : null,
-          pdf_url: canAccessVideo ? l.pdf_url : null,
-          pdf_path: canAccessVideo ? l.pdf_path : null,
-          progress_seconds: progress ? progress.progress_seconds : 0,
-          completed: progress ? progress.completed : false,
-          last_watched_at: progress ? progress.last_watched_at : null,
+          ...m,
+          lessons: securedLessons,
         };
-      }),
-    }));
+      })
+    );
 
     return {
       course: {
