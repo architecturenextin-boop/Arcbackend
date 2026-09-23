@@ -1,4 +1,8 @@
+﻿import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 import { AdminService } from "../services/admin.service.js";
+import { r2Service } from "../services/r2.service.js";
 import { successResponse } from "../utils/response.js";
 import { z } from "zod";
 
@@ -170,6 +174,48 @@ export class AdminController {
     }
   }
 
+  static async getPresignedUploadUrl(req, res, next) {
+    try {
+      if (!r2Service.isConfigured()) {
+        return res.status(400).json({
+          success: false,
+          message: "Cloudflare R2 is not configured on the server. Please set R2 credentials in environment variables.",
+        });
+      }
+
+      const { filename, contentType, folder = "videos" } = req.body;
+      if (!filename) {
+        return res.status(400).json({ success: false, message: "filename is required." });
+      }
+
+      const ext = path.extname(filename).toLowerCase() || ".mp4";
+      const cleanFolder = folder.replace(/[^a-zA-Z0-9_-]/g, "") || "videos";
+      const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+      const key = `${cleanFolder}/${cleanFolder.slice(0, 4)}-${uniqueSuffix}${ext}`;
+
+      const uploadUrl = await r2Service.getPresignedUploadUrl({
+        key,
+        contentType: contentType || "application/octet-stream",
+        expiresIn: 3600,
+      });
+
+      const publicUrl = r2Service.getPublicUrl(key);
+      const mediaUrl = publicUrl || `/api/v1/media/video/${path.basename(key)}`;
+
+      return successResponse(res, {
+        uploadUrl,
+        key,
+        filename: path.basename(key),
+        publicUrl,
+        mediaUrl,
+        videoUrl: mediaUrl,
+        videoPath: mediaUrl,
+      }, "Presigned upload URL generated successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async uploadVideo(req, res, next) {
     try {
       if (!req.file) {
@@ -178,6 +224,31 @@ export class AdminController {
 
       const filename = req.file.filename;
       const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+      if (r2Service.isConfigured()) {
+        const key = `videos/${filename}`;
+        await r2Service.uploadFile({
+          key,
+          filePath: req.file.path,
+          contentType: req.file.mimetype || "video/mp4",
+        });
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+        const publicUrl = r2Service.getPublicUrl(key);
+        const videoUrl = publicUrl || `${baseUrl}/api/v1/media/video/${filename}`;
+        const videoPath = publicUrl || `/api/v1/media/video/${filename}`;
+
+        return successResponse(res, {
+          filename,
+          originalName: req.file.originalname,
+          size: req.file.size,
+          videoUrl,
+          videoPath,
+          key,
+          storage: "r2",
+        }, "Video uploaded to Cloudflare R2 successfully");
+      }
+
       const videoUrl = `${baseUrl}/api/v1/media/video/${filename}`;
       const videoPath = `/api/v1/media/video/${filename}`;
 
@@ -187,6 +258,7 @@ export class AdminController {
         size: req.file.size,
         videoUrl,
         videoPath,
+        storage: "local",
       }, "Video uploaded successfully");
     } catch (err) {
       next(err);
@@ -201,6 +273,31 @@ export class AdminController {
 
       const filename = req.file.filename;
       const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+      if (r2Service.isConfigured()) {
+        const key = `images/${filename}`;
+        await r2Service.uploadFile({
+          key,
+          filePath: req.file.path,
+          contentType: req.file.mimetype || "image/png",
+        });
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+        const publicUrl = r2Service.getPublicUrl(key);
+        const imageUrl = publicUrl || `${baseUrl}/uploads/images/${filename}`;
+        const imagePath = publicUrl || `/uploads/images/${filename}`;
+
+        return successResponse(res, {
+          filename,
+          originalName: req.file.originalname,
+          size: req.file.size,
+          imageUrl,
+          imagePath,
+          key,
+          storage: "r2",
+        }, "Image uploaded to Cloudflare R2 successfully");
+      }
+
       const imageUrl = `${baseUrl}/uploads/images/${filename}`;
       const imagePath = `/uploads/images/${filename}`;
 
@@ -210,6 +307,7 @@ export class AdminController {
         size: req.file.size,
         imageUrl,
         imagePath,
+        storage: "local",
       }, "Image uploaded successfully");
     } catch (err) {
       next(err);
@@ -224,6 +322,31 @@ export class AdminController {
 
       const filename = req.file.filename;
       const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+      if (r2Service.isConfigured()) {
+        const key = `documents/${filename}`;
+        await r2Service.uploadFile({
+          key,
+          filePath: req.file.path,
+          contentType: req.file.mimetype || "application/pdf",
+        });
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+        const publicUrl = r2Service.getPublicUrl(key);
+        const documentUrl = publicUrl || `${baseUrl}/api/v1/media/document/${filename}`;
+        const documentPath = publicUrl || `/api/v1/media/document/${filename}`;
+
+        return successResponse(res, {
+          filename,
+          originalName: req.file.originalname,
+          size: req.file.size,
+          documentUrl,
+          documentPath,
+          key,
+          storage: "r2",
+        }, "Document uploaded to Cloudflare R2 successfully");
+      }
+
       const documentUrl = `${baseUrl}/api/v1/media/document/${filename}`;
       const documentPath = `/api/v1/media/document/${filename}`;
 
@@ -233,6 +356,7 @@ export class AdminController {
         size: req.file.size,
         documentUrl,
         documentPath,
+        storage: "local",
       }, "Document uploaded successfully");
     } catch (err) {
       next(err);

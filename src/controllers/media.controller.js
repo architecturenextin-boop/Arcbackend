@@ -1,8 +1,9 @@
-import fs from "fs";
+﻿import fs from "fs";
 import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import { prisma } from "../config/db.js";
+import { r2Service } from "../services/r2.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -87,68 +88,96 @@ export class MediaController {
         return res.status(400).json({ success: false, message: "Filename is required." });
       }
 
-      // 1. Prevent path traversal
-      const cleanFilename = path.basename(rawFilename);
-      const filePath = path.resolve(videoDir, cleanFilename);
-
-      if (!filePath.startsWith(videoDir) || !fs.existsSync(filePath)) {
-        return res.status(404).json({ success: false, message: "Video file not found." });
-      }
-
       const user = req.user;
       if (!user) {
         return res.status(401).json({ success: false, message: "Authentication required." });
       }
 
+      // 1. Prevent path traversal
+      const cleanFilename = path.basename(rawFilename);
+      const filePath = path.resolve(videoDir, cleanFilename);
+      const isLocal = filePath.startsWith(videoDir) && fs.existsSync(filePath);
+
       const isAdmin = user.role === "ADMIN";
 
-      if (isAdmin) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
+      // 2. Identify the owning lesson if not authorized purely by admin role
+      let authorized = isAdmin;
 
-      // 2. Identify the owning lesson
-      const lesson = await prisma.courseLesson.findFirst({
-        where: {
-          OR: [
-            { video_path: { contains: cleanFilename } },
-            { video_url: { contains: cleanFilename } },
-          ],
-        },
-        include: {
-          module: {
-            include: {
-              course: true,
+      if (!authorized) {
+        const lesson = await prisma.courseLesson.findFirst({
+          where: {
+            OR: [
+              { video_path: { contains: cleanFilename } },
+              { video_url: { contains: cleanFilename } },
+            ],
+          },
+          include: {
+            module: {
+              include: {
+                course: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      if (!lesson) {
-        return res.status(404).json({ success: false, message: "Lesson not found for this media." });
+        if (lesson) {
+          if (lesson.is_free) {
+            authorized = true;
+          } else {
+            const enrollment = await prisma.enrollment.findUnique({
+              where: {
+                user_id_course_id: {
+                  user_id: user.id,
+                  course_id: lesson.module.course_id,
+                },
+              },
+            });
+            if (enrollment && enrollment.status === "ACTIVE") {
+              authorized = true;
+            }
+          }
+        }
       }
 
-      // 3. Authorization check
-      if (lesson.is_free) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
-
-      const enrollment = await prisma.enrollment.findUnique({
-        where: {
-          user_id_course_id: {
-            user_id: user.id,
-            course_id: lesson.module.course_id,
-          },
-        },
-      });
-
-      if (!enrollment || enrollment.status !== "ACTIVE") {
+      if (!authorized) {
         return res.status(403).json({
           success: false,
           message: "Forbidden: You must be actively enrolled in this course to access this video.",
         });
       }
 
-      return streamFile(req, res, filePath, getContentType(cleanFilename));
+      // 3. Serve from Cloudflare R2 if configured
+      if (r2Service.isConfigured()) {
+        const possibleKeys = [
+          `videos/${cleanFilename}`,
+          cleanFilename,
+          `uploads/videos/${cleanFilename}`,
+        ];
+
+        for (const key of possibleKeys) {
+          const exists = await r2Service.objectExists(key);
+          if (exists) {
+            const presignedUrl = await r2Service.getPresignedDownloadUrl({ key, expiresIn: 14400 });
+            return res.redirect(302, presignedUrl);
+          }
+        }
+
+        // Try direct key if filename matches
+        try {
+          const presignedUrl = await r2Service.getPresignedDownloadUrl({ key: `videos/${cleanFilename}`, expiresIn: 14400 });
+          return res.redirect(302, presignedUrl);
+        } catch (_) {}
+      }
+
+      // 4. Fallback to local storage if available
+      if (isLocal) {
+        return streamFile(req, res, filePath, getContentType(cleanFilename));
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "Video file not found in storage. If using Cloudflare R2, ensure the file is uploaded to the R2 bucket.",
+      });
     } catch (err) {
       next(err);
     }
@@ -161,68 +190,95 @@ export class MediaController {
         return res.status(400).json({ success: false, message: "Filename is required." });
       }
 
-      // 1. Prevent path traversal
-      const cleanFilename = path.basename(rawFilename);
-      const filePath = path.resolve(docDir, cleanFilename);
-
-      if (!filePath.startsWith(docDir) || !fs.existsSync(filePath)) {
-        return res.status(404).json({ success: false, message: "Document file not found." });
-      }
-
       const user = req.user;
       if (!user) {
         return res.status(401).json({ success: false, message: "Authentication required." });
       }
 
+      // 1. Prevent path traversal
+      const cleanFilename = path.basename(rawFilename);
+      const filePath = path.resolve(docDir, cleanFilename);
+      const isLocal = filePath.startsWith(docDir) && fs.existsSync(filePath);
+
       const isAdmin = user.role === "ADMIN";
 
-      if (isAdmin) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
+      // 2. Identify the owning lesson if not authorized purely by admin role
+      let authorized = isAdmin;
 
-      // 2. Identify the owning lesson
-      const lesson = await prisma.courseLesson.findFirst({
-        where: {
-          OR: [
-            { pdf_path: { contains: cleanFilename } },
-            { pdf_url: { contains: cleanFilename } },
-          ],
-        },
-        include: {
-          module: {
-            include: {
-              course: true,
+      if (!authorized) {
+        const lesson = await prisma.courseLesson.findFirst({
+          where: {
+            OR: [
+              { pdf_path: { contains: cleanFilename } },
+              { pdf_url: { contains: cleanFilename } },
+            ],
+          },
+          include: {
+            module: {
+              include: {
+                course: true,
+              },
             },
           },
-        },
-      });
+        });
 
-      if (!lesson) {
-        return res.status(404).json({ success: false, message: "Lesson not found for this document." });
+        if (lesson) {
+          if (lesson.is_free) {
+            authorized = true;
+          } else {
+            const enrollment = await prisma.enrollment.findUnique({
+              where: {
+                user_id_course_id: {
+                  user_id: user.id,
+                  course_id: lesson.module.course_id,
+                },
+              },
+            });
+            if (enrollment && enrollment.status === "ACTIVE") {
+              authorized = true;
+            }
+          }
+        }
       }
 
-      // 3. Authorization check
-      if (lesson.is_free) {
-        return streamFile(req, res, filePath, getContentType(cleanFilename));
-      }
-
-      const enrollment = await prisma.enrollment.findUnique({
-        where: {
-          user_id_course_id: {
-            user_id: user.id,
-            course_id: lesson.module.course_id,
-          },
-        },
-      });
-
-      if (!enrollment || enrollment.status !== "ACTIVE") {
+      if (!authorized) {
         return res.status(403).json({
           success: false,
           message: "Forbidden: You must be actively enrolled in this course to access this document.",
         });
       }
 
-      return streamFile(req, res, filePath, getContentType(cleanFilename));
+      // 3. Serve from Cloudflare R2 if configured
+      if (r2Service.isConfigured()) {
+        const possibleKeys = [
+          `documents/${cleanFilename}`,
+          cleanFilename,
+          `uploads/documents/${cleanFilename}`,
+        ];
+
+        for (const key of possibleKeys) {
+          const exists = await r2Service.objectExists(key);
+          if (exists) {
+            const presignedUrl = await r2Service.getPresignedDownloadUrl({ key, expiresIn: 14400 });
+            return res.redirect(302, presignedUrl);
+          }
+        }
+
+        try {
+          const presignedUrl = await r2Service.getPresignedDownloadUrl({ key: `documents/${cleanFilename}`, expiresIn: 14400 });
+          return res.redirect(302, presignedUrl);
+        } catch (_) {}
+      }
+
+      // 4. Fallback to local storage if available
+      if (isLocal) {
+        return streamFile(req, res, filePath, getContentType(cleanFilename));
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "Document file not found in storage.",
+      });
     } catch (err) {
       next(err);
     }

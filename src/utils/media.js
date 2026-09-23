@@ -1,17 +1,23 @@
-import { config } from "../config/env.js";
+﻿import { config } from "../config/env.js";
 
 /**
  * Formats a media path (e.g. /uploads/images/img-xxx.jpeg) into a fully-qualified URL
- * using APP_URL or dynamically configured backend host.
+ * using APP_URL, Cloudflare R2 public URL, or dynamically configured backend host.
  */
 export function formatMediaUrl(urlOrPath, req = null) {
   if (!urlOrPath) return urlOrPath;
   const trimmed = String(urlOrPath).trim();
   if (!trimmed) return trimmed;
 
-  // External URLs (YouTube, Vimeo, Cloudinary, AWS S3, etc.)
+  // External or absolute URLs (YouTube, Cloudflare R2, Vimeo, Cloudinary, AWS S3, etc.)
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
+  }
+
+  // If R2 public URL is configured and this is an R2 key (e.g. videos/xxx.mp4 or images/xxx.png)
+  if (config.r2?.publicUrl && (trimmed.startsWith("videos/") || trimmed.startsWith("images/") || trimmed.startsWith("documents/"))) {
+    const base = config.r2.publicUrl.replace(/\/$/, "");
+    return `${base}/${trimmed}`;
   }
 
   let baseUrl = (config.appUrl || "").replace(/\/$/, "");
@@ -20,6 +26,10 @@ export function formatMediaUrl(urlOrPath, req = null) {
   }
 
   if (trimmed.startsWith("/uploads/")) {
+    return baseUrl ? `${baseUrl}${trimmed}` : trimmed;
+  }
+
+  if (trimmed.startsWith("/api/v1/media/")) {
     return baseUrl ? `${baseUrl}${trimmed}` : trimmed;
   }
 
@@ -35,5 +45,6 @@ export function formatCourseMedia(course, req = null) {
     ...course,
     cover_url: formatMediaUrl(course.cover_url, req),
     thumbnail_url: formatMediaUrl(course.thumbnail_url || course.cover_url, req),
+    preview_video_url: formatMediaUrl(course.preview_video_url, req),
   };
 }

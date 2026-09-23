@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { AdminController } from "../controllers/admin.controller.js";
 import { testimonialController } from "../controllers/testimonial.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
@@ -17,6 +17,9 @@ const router = Router();
 router.use(requireAuth, requireAdmin);
 
 router.get("/overview", AdminController.getOverviewStats);
+
+// Cloudflare R2 direct presigned upload URL
+router.post("/r2/presigned-url", AdminController.getPresignedUploadUrl);
 
 // Media Uploads
 router.post("/upload-video", uploadVideo.single("video"), verifyVideoSignature, AdminController.uploadVideo);
