@@ -16,7 +16,7 @@ function renderEmailTemplate({ title, subtitle, otp, expiryMinutes = 5, note }) 
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" max-width="540px" style="max-width: 540px; background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+        <table role="presentation" width="100%" style="max-width: 540px; background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
           
           <!-- Header -->
           <tr>
@@ -81,7 +81,7 @@ function renderEmailTemplate({ title, subtitle, otp, expiryMinutes = 5, note }) 
 
 export class EmailService {
   /**
-   * Fire-and-forget Signup Verification OTP email
+   * Dispatch Signup Verification OTP email
    */
   static sendSignupOtpEmail(email, rawOtp, name = "Learner") {
     // Non-blocking fire and forget
@@ -96,12 +96,16 @@ export class EmailService {
           note: `Enter this code on the verification screen to activate your account and start learning.`,
         });
 
-        await sendEmail({
+        const res = await sendEmail({
           to: email,
           subject,
           html,
           text: `Your ArchitectureNext verification code is: ${rawOtp} (valid for 5 minutes).`,
         });
+
+        if (!res.success) {
+          console.error(`[EMAIL ERROR] sendSignupOtpEmail failed for ${email}:`, res.error);
+        }
       } catch (err) {
         console.error(`[EMAIL ERROR] Failed to send signup OTP to ${email}:`, err.message);
       }
@@ -109,7 +113,7 @@ export class EmailService {
   }
 
   /**
-   * Fire-and-forget Password Reset OTP email
+   * Dispatch Password Reset OTP email
    */
   static sendPasswordResetOtpEmail(email, rawOtp, name = "Learner") {
     // Non-blocking fire and forget
@@ -124,12 +128,16 @@ export class EmailService {
           note: `This code will expire in 5 minutes. If you did not make this request, please change your password immediately or contact support.`,
         });
 
-        await sendEmail({
+        const res = await sendEmail({
           to: email,
           subject,
           html,
           text: `Your ArchitectureNext password reset code is: ${rawOtp} (valid for 5 minutes).`,
         });
+
+        if (!res.success) {
+          console.error(`[EMAIL ERROR] sendPasswordResetOtpEmail failed for ${email}:`, res.error);
+        }
       } catch (err) {
         console.error(`[EMAIL ERROR] Failed to send password reset OTP to ${email}:`, err.message);
       }
