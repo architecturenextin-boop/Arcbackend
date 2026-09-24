@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const createOrderSchema = z.object({
   courseId: z.string().uuid("Invalid Course ID"),
+  couponCode: z.string().optional().nullable(),
 });
 
 const verifyPaymentSchema = z.preprocess((val) => {
@@ -28,8 +29,8 @@ const getPaymentStatusSchema = z.object({
 export class PaymentController {
   static async createOrder(req, res, next) {
     try {
-      const { courseId } = createOrderSchema.parse(req.body);
-      const result = await PaymentService.createOrder({ courseId, user: req.user });
+      const { courseId, couponCode } = createOrderSchema.parse(req.body);
+      const result = await PaymentService.createOrder({ courseId, couponCode, user: req.user });
       return successResponse(res, result, "Payment order created");
     } catch (err) {
       next(err);

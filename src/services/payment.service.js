@@ -1,13 +1,14 @@
 import crypto from "crypto";
 import { prisma } from "../config/db.js";
 import { config } from "../config/env.js";
+import { CouponService } from "./coupon.service.js";
 
 function razorpayAuthorization(keyId, keySecret) {
   return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
 }
 
 export class PaymentService {
-  static async createOrder({ courseId, user }) {
+  static async createOrder({ courseId, couponCode, user }) {
     const existingEnrollment = await prisma.enrollment.findUnique({
       where: {
         user_id_course_id: {
@@ -29,11 +30,106 @@ export class PaymentService {
       throw new Error("Course not found.");
     }
 
-    const currency = course.currency === "₹" ? "INR" : course.currency || "INR";
-    const amountInPaise = Math.round(Number(course.price) * 100);
+    const coursePrice = Number(course.price);
+    const currency = course.currency === "?" || course.currency === ",1" ? "INR" : course.currency || "INR";
 
+    let discountAmount = 0;
+    let finalAmount = coursePrice;
+    let validatedCoupon = null;
+
+    if (couponCode && typeof couponCode === "string" && couponCode.trim()) {
+      const couponRes = await CouponService.validateCoupon({
+        code: couponCode,
+        courseId: course.id,
+        userId: user.id,
+      });
+      discountAmount = couponRes.discountAmount;
+      finalAmount = couponRes.finalAmount;
+      validatedCoupon = couponRes.coupon;
+    }
+
+    // ZERO PAYMENT FLOW
+    if (finalAmount === 0) {
+      const orderUniqueId = `free_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const paymentUniqueId = `coupon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. Create completed payment record
+        const payment = await tx.payment.create({
+          data: {
+            user_id: user.id,
+            course_id: course.id,
+            amount: 0,
+            originalAmount: coursePrice,
+            discountAmount: discountAmount,
+            finalAmount: 0,
+            couponId: validatedCoupon ? validatedCoupon.id : null,
+            couponCode: validatedCoupon ? validatedCoupon.code : null,
+            currency,
+            status: "COMPLETED",
+            gateway: "COUPON",
+            gateway_order_id: orderUniqueId,
+            gateway_payment_id: paymentUniqueId,
+            paid_at: new Date(),
+          },
+        });
+
+        // 2. Create active enrollment
+        await tx.enrollment.upsert({
+          where: {
+            user_id_course_id: {
+              user_id: user.id,
+              course_id: course.id,
+            },
+          },
+          create: {
+            user_id: user.id,
+            course_id: course.id,
+            payment_id: payment.id,
+            status: "ACTIVE",
+            enrolled_at: new Date(),
+          },
+          update: {
+            payment_id: payment.id,
+            status: "ACTIVE",
+            enrolled_at: new Date(),
+          },
+        });
+
+        // 3. Create CouponRedemption and increment usedCount if coupon applied
+        if (validatedCoupon) {
+          await tx.couponRedemption.create({
+            data: {
+              couponId: validatedCoupon.id,
+              userId: user.id,
+              paymentId: payment.id,
+              orderId: orderUniqueId,
+              discountAmount: discountAmount,
+            },
+          });
+
+          await tx.coupon.update({
+            where: { id: validatedCoupon.id },
+            data: {
+              usedCount: { increment: 1 },
+            },
+          });
+        }
+
+        return payment;
+      });
+
+      return {
+        free: true,
+        paymentId: result.id,
+        courseId: course.id,
+      };
+    }
+
+    // PAID FLOW (finalAmount > 0)
+    const amountInPaise = Math.round(finalAmount * 100);
     if (!Number.isSafeInteger(amountInPaise) || amountInPaise <= 0) {
-      throw new Error("The course price is invalid.");
+      throw new Error("Invalid final payment amount.");
     }
 
     // 1. Create a pending payment record in PostgreSQL
@@ -41,7 +137,12 @@ export class PaymentService {
       data: {
         user_id: user.id,
         course_id: course.id,
-        amount: course.price,
+        amount: finalAmount,
+        originalAmount: coursePrice,
+        discountAmount: discountAmount,
+        finalAmount: finalAmount,
+        couponId: validatedCoupon ? validatedCoupon.id : null,
+        couponCode: validatedCoupon ? validatedCoupon.code : null,
         currency,
         status: "PENDING",
         gateway: "razorpay",
@@ -73,8 +174,8 @@ export class PaymentService {
             orderId = razorpayOrder.id;
           }
         } else {
-          const errBody = await res.text();
-          console.error(`Razorpay Order Creation Failed (HTTP ${res.status}):`, errBody);
+          const errData = await res.text();
+          console.warn("Razorpay order creation fallback:", errData);
         }
       } catch (err) {
         console.warn("Razorpay API call warning (using fallback order ID):", err.message);
@@ -104,6 +205,7 @@ export class PaymentService {
       },
       include: {
         course: true,
+        coupon: true,
       },
     });
 
@@ -135,9 +237,9 @@ export class PaymentService {
         });
         if (res.ok) {
           const razorpayPayment = await res.json();
-          const expectedAmountInPaise = Math.round(Number(payment.course.price) * 100);
+          const expectedAmountInPaise = Math.round(Number(payment.amount) * 100);
           if (razorpayPayment.amount !== expectedAmountInPaise) {
-            throw new Error(`Payment verification failed: Paid amount (${razorpayPayment.amount}) does not match course price (${expectedAmountInPaise}).`);
+            throw new Error(`Payment verification failed: Paid amount (${razorpayPayment.amount}) does not match expected amount (${expectedAmountInPaise}).`);
           }
           if (razorpayPayment.status !== "captured" && razorpayPayment.status !== "authorized") {
             throw new Error(`Payment verification failed: Gateway transaction status is ${razorpayPayment.status}`);
@@ -152,7 +254,7 @@ export class PaymentService {
       }
     }
 
-    // Execute atomic transaction: Mark payment as completed and create/update active enrollment
+    // Execute atomic transaction: Mark payment as completed, create enrollment, and handle coupon redemption
     await prisma.$transaction(async (tx) => {
       try {
         await tx.payment.update({
@@ -191,6 +293,37 @@ export class PaymentService {
           enrolled_at: new Date(),
         },
       });
+
+      // If coupon was applied to this payment, record redemption & increment usage idempotently
+      if (payment.couponId) {
+        const existingRedemption = await tx.couponRedemption.findUnique({
+          where: {
+            couponId_paymentId: {
+              couponId: payment.couponId,
+              paymentId: payment.id,
+            },
+          },
+        });
+
+        if (!existingRedemption) {
+          await tx.couponRedemption.create({
+            data: {
+              couponId: payment.couponId,
+              userId: user.id,
+              paymentId: payment.id,
+              orderId: payment.gateway_order_id,
+              discountAmount: payment.discountAmount || 0,
+            },
+          });
+
+          await tx.coupon.update({
+            where: { id: payment.couponId },
+            data: {
+              usedCount: { increment: 1 },
+            },
+          });
+        }
+      }
     });
 
     return { success: true, paymentId: payment.id, courseId: payment.course_id };
@@ -228,6 +361,7 @@ export class PaymentService {
         },
         include: {
           course: true,
+          coupon: true,
         },
       });
 
@@ -240,7 +374,7 @@ export class PaymentService {
         return { processed: true, message: "Payment already processed" };
       }
 
-      const expectedAmountInPaise = Math.round(Number(payment.course.price) * 100);
+      const expectedAmountInPaise = Math.round(Number(payment.amount) * 100);
       if (amountPaid !== expectedAmountInPaise) {
         console.error(`[Webhook Error] Amount mismatch for payment ${payment.id}. Expected ${expectedAmountInPaise}, got ${amountPaid}`);
         await prisma.payment.update({
@@ -261,7 +395,6 @@ export class PaymentService {
             },
           });
         } catch (err) {
-          // Handle concurrency idempotency: check if already completed by user redirection verifyPayment
           const check = await tx.payment.findUnique({ where: { id: payment.id } });
           if (!check || check.status !== "COMPLETED") {
             throw err;
@@ -288,6 +421,36 @@ export class PaymentService {
             enrolled_at: new Date(),
           },
         });
+
+        if (payment.couponId) {
+          const existingRedemption = await tx.couponRedemption.findUnique({
+            where: {
+              couponId_paymentId: {
+                couponId: payment.couponId,
+                paymentId: payment.id,
+              },
+            },
+          });
+
+          if (!existingRedemption) {
+            await tx.couponRedemption.create({
+              data: {
+                couponId: payment.couponId,
+                userId: payment.user_id,
+                paymentId: payment.id,
+                orderId: payment.gateway_order_id,
+                discountAmount: payment.discountAmount || 0,
+              },
+            });
+
+            await tx.coupon.update({
+              where: { id: payment.couponId },
+              data: {
+                usedCount: { increment: 1 },
+              },
+            });
+          }
+        }
       });
 
       console.log(`[Webhook Success] User ${payment.user_id} enrolled in course ${payment.course_id} via webhook`);
@@ -303,6 +466,9 @@ export class PaymentService {
       include: {
         course: {
           select: { id: true, title: true, slug: true, cover_url: true },
+        },
+        coupon: {
+          select: { id: true, code: true, discountType: true, discountValue: true },
         },
       },
     });

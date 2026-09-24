@@ -1,6 +1,7 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import { AdminController } from "../controllers/admin.controller.js";
 import { testimonialController } from "../controllers/testimonial.controller.js";
+import { CouponController } from "../controllers/coupon.controller.js";
 import { requireAuth } from "../middlewares/auth.middleware.js";
 import { requireAdmin } from "../middlewares/rbac.middleware.js";
 import { 
@@ -46,5 +47,12 @@ router.post("/testimonials", testimonialController.createAdminTestimonial);
 router.patch("/testimonials/:id/approve", testimonialController.approveTestimonial);
 router.patch("/testimonials/:id/reject", testimonialController.rejectTestimonial);
 router.delete("/testimonials/:id", testimonialController.deleteAdminTestimonial);
+
+// Coupon Management
+router.get("/coupons", CouponController.getAll);
+router.post("/coupons", CouponController.create);
+router.put("/coupons/:id", CouponController.update);
+router.patch("/coupons/:id/toggle", CouponController.toggle);
+router.delete("/coupons/:id", CouponController.delete);
 
 export default router;

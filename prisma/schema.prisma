@@ -31,6 +31,11 @@ enum EnrollmentStatus {
   CANCELLED
 }
 
+enum DiscountType {
+  FLAT
+  PERCENT
+}
+
 model User {
   id                     String           @id @default(uuid()) @db.Uuid
   email                  String           @unique
@@ -56,6 +61,7 @@ model User {
   testimonials           Testimonial[]
   otps                   Otp[]
   password_reset_tokens  PasswordResetToken[]
+  coupon_redemptions     CouponRedemption[]
 
   @@map("users")
   @@index([email])
@@ -72,7 +78,7 @@ model Course {
   thumbnail_url       String?
   price               Int              @default(0)
   original_price      Int              @default(0)
-  currency            String           @default("₹")
+  currency            String           @default("INR")
   total_duration      String?
   total_lessons       Int              @default(0)
   level               String?          @default("Beginner")
@@ -95,6 +101,7 @@ model Course {
   enrollments         Enrollment[]
   progress            LessonProgress[]
   testimonials        Testimonial[]
+  coupons             Coupon[]
 
   @@map("courses")
   @@index([slug])
@@ -142,27 +149,80 @@ model CourseLesson {
   @@index([sort_order])
 }
 
+model Coupon {
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique
+  discountType  DiscountType       @map("discount_type")
+  discountValue Int                @map("discount_value")
+  maxDiscount   Int?               @map("max_discount")
+  courseId      String?            @map("course_id") @db.Uuid
+  expiresAt     DateTime?          @map("expires_at")
+  usageLimit    Int?               @map("usage_limit")
+  perUserLimit  Int                @default(1) @map("per_user_limit")
+  usedCount     Int                @default(0) @map("used_count")
+  isActive      Boolean            @default(true) @map("is_active")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  course        Course?            @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  redemptions   CouponRedemption[]
+  payments      Payment[]
+
+  @@map("coupons")
+  @@index([code])
+  @@index([isActive])
+  @@index([courseId])
+}
+
+model CouponRedemption {
+  id             String   @id @default(uuid()) @db.Uuid
+  couponId       String   @map("coupon_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  paymentId      String?  @map("payment_id") @db.Uuid
+  orderId        String?  @map("order_id")
+  discountAmount Int      @map("discount_amount")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment        Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@unique([couponId, paymentId])
+  @@map("coupon_redemptions")
+  @@index([couponId])
+  @@index([userId])
+  @@index([paymentId])
+}
+
 model Payment {
-  id                 String        @id @default(uuid()) @db.Uuid
-  user_id            String        @db.Uuid
-  course_id          String        @db.Uuid
+  id                 String             @id @default(uuid()) @db.Uuid
+  user_id            String             @db.Uuid
+  course_id          String             @db.Uuid
   amount             Int
-  currency           String        @default("INR")
-  gateway            String?       @default("razorpay")
+  originalAmount     Int?               @map("original_amount")
+  discountAmount     Int                @default(0) @map("discount_amount")
+  finalAmount        Int?               @map("final_amount")
+  couponId           String?            @map("coupon_id") @db.Uuid
+  couponCode         String?            @map("coupon_code")
+  currency           String             @default("INR")
+  gateway            String?            @default("razorpay")
   gateway_order_id   String?
   gateway_payment_id String?
-  status             PaymentStatus @default(PENDING)
+  status             PaymentStatus      @default(PENDING)
   paid_at            DateTime?
-  created_at         DateTime      @default(now())
-  updated_at         DateTime      @updatedAt
+  created_at         DateTime           @default(now())
+  updated_at         DateTime           @updatedAt
 
-  user               User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  course             Course        @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  course             Course             @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  coupon             Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
   enrollments        Enrollment[]
+  redemptions        CouponRedemption[]
 
   @@map("payments")
   @@index([user_id])
   @@index([course_id])
+  @@index([couponId])
   @@index([status])
   @@index([gateway_order_id])
 }
@@ -285,4 +345,3 @@ model Testimonial {
   @@index([course_id])
   @@index([created_at])
 }
-

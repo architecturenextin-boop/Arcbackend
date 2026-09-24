@@ -6,6 +6,7 @@ import paymentRoutes from "./payment.routes.js";
 import adminRoutes from "./admin.routes.js";
 import mediaRoutes from "./media.routes.js";
 import testimonialRoutes from "./testimonial.routes.js";
+import couponRoutes from "./coupon.routes.js";
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use("/payments", paymentRoutes);
 router.use("/admin", adminRoutes);
 router.use("/media", mediaRoutes);
 router.use("/testimonials", testimonialRoutes);
+router.use("/coupons", couponRoutes);
 
 export default router;
