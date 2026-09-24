@@ -31,7 +31,10 @@ export class PaymentService {
     }
 
     const coursePrice = Number(course.price);
-    const currency = course.currency === "?" || course.currency === ",1" ? "INR" : course.currency || "INR";
+    // Sanitize currency: only accept valid ISO-4217 3-letter codes; default to INR
+    const VALID_RAZORPAY_CURRENCIES = ["INR","USD","EUR","GBP","AED","SGD","MYR","AUD","CAD","JPY","CHF","HKD"];
+    const rawCurrency = (course.currency || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+    const currency = VALID_RAZORPAY_CURRENCIES.includes(rawCurrency) ? rawCurrency : "INR";
 
     let discountAmount = 0;
     let finalAmount = coursePrice;
