@@ -5,6 +5,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
+    "build": "prisma generate",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "postinstall": "prisma generate",
@@ -34,3 +35,5 @@
     "zod": "^3.24.2"
   }
 }
+
+

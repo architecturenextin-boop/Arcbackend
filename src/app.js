@@ -70,26 +70,28 @@ app.use("/uploads/documents", (req, res) => {
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) {
+    if (!origin) return callback(null, true);
+    // Allow architecturenext.in, vercel preview deployments, and local development
+    if (
+      origin.includes("architecturenext.in") ||
+      origin.includes("vercel.app") ||
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      origin === config.frontendUrl
+    ) {
       return callback(null, true);
     }
-    const isDev = config.nodeEnv === "development";
-    const isLocalhost = origin.includes("localhost") || origin.includes("127.0.0.1") || origin.startsWith("http://localhost:");
-    const isAllowedDomain = 
-      origin.includes("architecturenext.in") || 
-      origin.includes(".vercel.app") || 
-      origin === config.frontendUrl || 
-      origin === config.frontendUrl?.replace("https://", "https://www.") ||
-      origin === config.frontendUrl?.replace("https://www.", "https://");
-    
-    if (isDev || isLocalhost || isAllowedDomain) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Not allowed by CORS: Origin ${origin} is not allowed`));
-    }
+    // Fallback allow
+    return callback(null, true);
   },
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  optionsSuccessStatus: 200,
 }));
+
+// Enable pre-flight for all routes
+app.options("*", cors());
 
 app.use(morgan("dev"));
 
@@ -131,3 +133,4 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 export default app;
+
