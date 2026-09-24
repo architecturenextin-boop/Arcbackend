@@ -53,7 +53,7 @@ export class CouponController {
   static async toggle(req, res, next) {
     try {
       const coupon = await CouponService.toggleCoupon(req.params.id);
-      return successResponse(res, coupon, Coupon  successfully);
+      return successResponse(res, coupon, `Coupon ${coupon.isActive ? "activated" : "deactivated"} successfully`);
     } catch (err) {
       return errorResponse(res, err.message || "Failed to toggle coupon status", 400);
     }
