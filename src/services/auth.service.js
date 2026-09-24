@@ -84,7 +84,7 @@ export class AuthService {
     const { rawOtp } = await OtpService.createOtp(user.id, "SIGNUP_VERIFY");
 
     // Send asynchronous fire-and-forget verification email
-    EmailService.sendSignupOtpEmail(
+    await EmailService.sendSignupOtpEmail(
       user.email,
       rawOtp,
       user.first_name || user.full_name || "Learner"
@@ -192,13 +192,13 @@ export class AuthService {
     const { rawOtp } = await OtpService.createOtp(user.id, purpose);
 
     if (purpose === "SIGNUP_VERIFY") {
-      EmailService.sendSignupOtpEmail(
+      await EmailService.sendSignupOtpEmail(
         user.email,
         rawOtp,
         user.first_name || user.full_name || "Learner"
       );
     } else if (purpose === "PASSWORD_RESET") {
-      EmailService.sendPasswordResetOtpEmail(
+      await EmailService.sendPasswordResetOtpEmail(
         user.email,
         rawOtp,
         user.first_name || user.full_name || "Learner"
@@ -226,7 +226,7 @@ export class AuthService {
     if (user) {
       try {
         const { rawOtp } = await OtpService.createOtp(user.id, "PASSWORD_RESET");
-        EmailService.sendPasswordResetOtpEmail(
+        await EmailService.sendPasswordResetOtpEmail(
           user.email,
           rawOtp,
           user.first_name || user.full_name || "Learner"
@@ -338,7 +338,7 @@ export class AuthService {
     if (!user.is_verified) {
       try {
         const { rawOtp } = await OtpService.createOtp(user.id, "SIGNUP_VERIFY");
-        EmailService.sendSignupOtpEmail(
+        await EmailService.sendSignupOtpEmail(
           user.email,
           rawOtp,
           user.first_name || user.full_name || "Learner"
