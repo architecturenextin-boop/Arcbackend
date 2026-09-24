@@ -563,11 +563,11 @@ export class AdminService {
       user_id: p.user_id,
       course_id: p.course_id,
       amount: p.amount,
-      currency: p.currency || "₹",
+      currency: p.currency || "INR",
       gateway: p.gateway || "razorpay",
       gateway_order_id: p.gateway_order_id,
       gateway_payment_id: p.gateway_payment_id,
-      status: p.status.toLowerCase(),
+      status: p.status ? p.status.toLowerCase() : "completed",
       paid_at: p.paid_at || p.created_at,
       created_at: p.created_at,
       studentName: p.user?.full_name || p.user?.email || "Learner",
@@ -581,4 +581,5 @@ export class AdminService {
     return { payments: formatted, total };
   }
 }
+
 
