@@ -96,7 +96,7 @@ export class AdminService {
       prisma.course.count({ where: { published: true } }),
       prisma.enrollment.count({ where: { status: "ACTIVE" } }),
       prisma.payment.findMany({
-        where: { status: "CAPTURED" },
+        where: { status: "COMPLETED" },
         select: { amount: true },
       }),
       prisma.user.findMany({
@@ -581,3 +581,4 @@ export class AdminService {
     return { payments: formatted, total };
   }
 }
+
