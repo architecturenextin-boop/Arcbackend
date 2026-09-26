@@ -23,10 +23,8 @@ async function cleanExpiredTokens() {
 
 async function ensureSchemaMigration() {
   try {
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE "course_lessons" ADD COLUMN IF NOT EXISTS "hls_url" TEXT;
-      ALTER TABLE "course_lessons" ADD COLUMN IF NOT EXISTS "hls_path" TEXT;
-    `);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "course_lessons" ADD COLUMN IF NOT EXISTS "hls_url" TEXT;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "course_lessons" ADD COLUMN IF NOT EXISTS "hls_path" TEXT;`);
     console.log(" [DB Migration] Verified course_lessons schema columns (hls_url, hls_path).");
   } catch (err) {
     console.warn(" [DB Migration Warning]:", err.message);

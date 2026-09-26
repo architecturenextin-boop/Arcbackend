@@ -46,8 +46,7 @@ export class CourseService {
                 duration: true,
                 is_free: true,
                 sort_order: true,
-                video_url: true, // Only free lessons will have public video link in details
-                hls_url: true,
+                video_url: true,
                 created_at: true,
                 updated_at: true,
               },
@@ -67,7 +66,7 @@ export class CourseService {
       lessons: m.lessons.map((l) => ({
         ...l,
         video_url: l.is_free ? l.video_url : null,
-        hls_url: l.is_free ? l.hls_url : null,
+        hls_url: l.is_free && l.video_url ? `/api/v1/media/hls/${l.id}/master.m3u8` : null,
       })),
     }));
 
@@ -89,6 +88,21 @@ export class CourseService {
           include: {
             lessons: {
               orderBy: { sort_order: "asc" },
+              select: {
+                id: true,
+                module_id: true,
+                title: true,
+                description: true,
+                duration: true,
+                sort_order: true,
+                is_free: true,
+                video_url: true,
+                video_path: true,
+                pdf_url: true,
+                pdf_path: true,
+                created_at: true,
+                updated_at: true,
+              },
             },
           },
         },
@@ -156,11 +170,9 @@ export class CourseService {
                 } else {
                   resolvedVideoUrl = l.video_url;
                 }
-              }
 
-              // Include HLS URL if processed or fallback to standard video stream
-              if (l.hls_url) {
-                resolvedHlsUrl = l.hls_url;
+                // Adaptive HLS streaming endpoint derived per lesson
+                resolvedHlsUrl = `/api/v1/media/hls/${l.id}/master.m3u8`;
               }
 
               const rawPdf = l.pdf_url || l.pdf_path;
@@ -195,7 +207,6 @@ export class CourseService {
               video_url: resolvedVideoUrl,
               video_path: resolvedVideoUrl,
               hls_url: resolvedHlsUrl,
-              hls_path: l.hls_path || null,
               pdf_url: resolvedPdfUrl,
               pdf_path: resolvedPdfUrl,
               progress_seconds: progress ? progress.progress_seconds : 0,

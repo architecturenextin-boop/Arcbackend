@@ -135,8 +135,6 @@ model CourseLesson {
   duration    String?          @default("15:00")
   video_url   String?
   video_path  String?
-  hls_url     String?
-  hls_path    String?
   pdf_url     String?
   pdf_path    String?
   is_free     Boolean          @default(false)
@@ -348,4 +346,5 @@ model Testimonial {
   @@index([course_id])
   @@index([created_at])
 }
+
 
