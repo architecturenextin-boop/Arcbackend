@@ -56,6 +56,14 @@ const deleteCourseSchema = z.object({
   id: z.string().uuid("Invalid Course ID"),
 });
 
+const revokeEnrollmentSchema = z.object({
+  userId: z.string().uuid("Invalid User ID").optional(),
+  courseId: z.string().uuid("Invalid Course ID").optional(),
+  enrollmentId: z.string().uuid("Invalid Enrollment ID").optional(),
+}).refine((data) => data.enrollmentId || (data.userId && data.courseId), {
+  message: "Either enrollmentId or both userId and courseId must be provided.",
+});
+
 const manualEnrollSchema = z.object({
   userId: z.string().uuid("Invalid User ID"),
   courseId: z.string().uuid("Invalid Course ID"),
@@ -129,6 +137,17 @@ export class AdminController {
       if (limit) res.setHeader("x-limit", limit);
 
       return successResponse(res, students);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+
+  static async revokeStudentEnrollment(req, res, next) {
+    try {
+      const { userId, courseId, enrollmentId } = revokeEnrollmentSchema.parse(req.body);
+      const result = await AdminService.revokeStudentEnrollment({ userId, courseId, enrollmentId });
+      return successResponse(res, result, "Student enrollment revoked successfully");
     } catch (err) {
       next(err);
     }

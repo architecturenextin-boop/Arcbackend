@@ -480,6 +480,28 @@ export class AdminService {
     return { students, total };
   }
 
+
+  static async revokeStudentEnrollment({ userId, courseId, enrollmentId }) {
+    if (enrollmentId) {
+      return await prisma.enrollment.delete({
+        where: { id: enrollmentId },
+      });
+    }
+
+    if (userId && courseId) {
+      return await prisma.enrollment.delete({
+        where: {
+          user_id_course_id: {
+            user_id: userId,
+            course_id: courseId,
+          },
+        },
+      });
+    }
+
+    throw new Error("Either enrollmentId or both userId and courseId must be provided.");
+  }
+
   static async manualEnrollStudent({ userId, courseId }) {
     const enrollment = await prisma.enrollment.upsert({
       where: {
