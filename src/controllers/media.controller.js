@@ -4,6 +4,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import { prisma } from "../config/db.js";
 import { r2Service } from "../services/r2.service.js";
+import { hlsService } from "../services/hls.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +16,7 @@ const uploadBaseDir = isVercel
 
 const videoDir = path.join(uploadBaseDir, "videos");
 const docDir = path.join(uploadBaseDir, "documents");
+const hlsDir = path.join(uploadBaseDir, "hls");
 
 const MIME_MAP = {
   ".mp4": "video/mp4",
@@ -34,6 +36,8 @@ const MIME_MAP = {
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
   ".txt": "text/plain",
+  ".m3u8": "application/vnd.apple.mpegurl",
+  ".ts": "video/MP2T",
 };
 
 function getContentType(filename) {
@@ -177,6 +181,100 @@ export class MediaController {
       return res.status(404).json({
         success: false,
         message: "Video file not found in storage. If using Cloudflare R2, ensure the file is uploaded to the R2 bucket.",
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async streamHls(req, res, next) {
+    try {
+      const { lessonId } = req.params;
+      const requestedFile = req.params[0] || req.params.file || "master.m3u8";
+
+      if (!lessonId) {
+        return res.status(400).json({ success: false, message: "Lesson ID is required." });
+      }
+
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: "Authentication required." });
+      }
+
+      const cleanFileName = path.basename(requestedFile);
+      const isMaster = cleanFileName.endsWith(".m3u8");
+      const isTsSegment = cleanFileName.endsWith(".ts");
+
+      if (!isMaster && !isTsSegment) {
+        return res.status(400).json({ success: false, message: "Invalid HLS file format requested." });
+      }
+
+      const isAdmin = user.role === "ADMIN";
+
+      // 1. Authorize user against lesson enrollment / free preview
+      let authorized = isAdmin;
+
+      if (!authorized) {
+        const lesson = await prisma.courseLesson.findUnique({
+          where: { id: lessonId },
+          include: {
+            module: {
+              include: {
+                course: true,
+              },
+            },
+          },
+        });
+
+        if (lesson) {
+          if (lesson.is_free) {
+            authorized = true;
+          } else {
+            const enrollment = await prisma.enrollment.findUnique({
+              where: {
+                user_id_course_id: {
+                  user_id: user.id,
+                  course_id: lesson.module.course_id,
+                },
+              },
+            });
+            if (enrollment && enrollment.status === "ACTIVE") {
+              authorized = true;
+            }
+          }
+        }
+      }
+
+      if (!authorized) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: You must be actively enrolled in this course to stream this lesson.",
+        });
+      }
+
+      // 2. Resolve HLS file on filesystem
+      const filePath = path.resolve(hlsDir, lessonId, cleanFileName);
+      const isValidPath = filePath.startsWith(path.resolve(hlsDir, lessonId)) && fs.existsSync(filePath);
+
+      if (isValidPath) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Headers", "*");
+        res.setHeader("Accept-Ranges", "bytes");
+
+        if (isMaster) {
+          res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+          res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        } else if (isTsSegment) {
+          res.setHeader("Content-Type", "video/MP2T");
+          res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+        }
+
+        return fs.createReadStream(filePath).pipe(res);
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "HLS stream asset not found or transcoding still in progress.",
       });
     } catch (err) {
       next(err);

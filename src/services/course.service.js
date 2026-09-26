@@ -1,4 +1,4 @@
-import path from "path";
+﻿import path from "path";
 import { r2Service } from "./r2.service.js";
 import { prisma } from "../config/db.js";
 
@@ -47,6 +47,7 @@ export class CourseService {
                 is_free: true,
                 sort_order: true,
                 video_url: true, // Only free lessons will have public video link in details
+                hls_url: true,
                 created_at: true,
                 updated_at: true,
               },
@@ -66,6 +67,7 @@ export class CourseService {
       lessons: m.lessons.map((l) => ({
         ...l,
         video_url: l.is_free ? l.video_url : null,
+        hls_url: l.is_free ? l.hls_url : null,
       })),
     }));
 
@@ -133,6 +135,7 @@ export class CourseService {
             const progress = progressMap.get(l.id);
 
             let resolvedVideoUrl = null;
+            let resolvedHlsUrl = null;
             let resolvedPdfUrl = null;
 
             if (canAccessVideo) {
@@ -153,6 +156,11 @@ export class CourseService {
                 } else {
                   resolvedVideoUrl = l.video_url;
                 }
+              }
+
+              // Include HLS URL if processed or fallback to standard video stream
+              if (l.hls_url) {
+                resolvedHlsUrl = l.hls_url;
               }
 
               const rawPdf = l.pdf_url || l.pdf_path;
@@ -186,6 +194,8 @@ export class CourseService {
               can_access: canAccessVideo,
               video_url: resolvedVideoUrl,
               video_path: resolvedVideoUrl,
+              hls_url: resolvedHlsUrl,
+              hls_path: l.hls_path || null,
               pdf_url: resolvedPdfUrl,
               pdf_path: resolvedPdfUrl,
               progress_seconds: progress ? progress.progress_seconds : 0,

@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -26,12 +26,14 @@ const uploadDir = isVercel
 const videoUploadDir = path.join(uploadDir, "videos");
 const imageUploadDir = path.join(uploadDir, "images");
 const docUploadDir = path.join(uploadDir, "documents");
+const hlsUploadDir = path.join(uploadDir, "hls");
 
 try {
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
   if (!fs.existsSync(videoUploadDir)) fs.mkdirSync(videoUploadDir, { recursive: true });
   if (!fs.existsSync(imageUploadDir)) fs.mkdirSync(imageUploadDir, { recursive: true });
   if (!fs.existsSync(docUploadDir)) fs.mkdirSync(docUploadDir, { recursive: true });
+  if (!fs.existsSync(hlsUploadDir)) fs.mkdirSync(hlsUploadDir, { recursive: true });
 } catch (_) {}
 
 app.use(helmet({
@@ -58,6 +60,13 @@ app.use("/uploads/videos", (req, res) => {
   res.status(403).json({
     success: false,
     message: "Direct access to private videos is prohibited. Access via authenticated /api/v1/media/video/:filename",
+  });
+});
+
+app.use("/uploads/hls", (req, res) => {
+  res.status(403).json({
+    success: false,
+    message: "Direct access to HLS streams is prohibited. Access via authenticated /api/v1/media/hls/:lessonId/master.m3u8",
   });
 });
 
@@ -133,4 +142,5 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 export default app;
+
 
