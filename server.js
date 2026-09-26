@@ -1,4 +1,4 @@
-import app from "./src/app.js";
+﻿import app from "./src/app.js";
 import { config } from "./src/config/env.js";
 import { prisma } from "./src/config/db.js";
 
@@ -18,6 +18,18 @@ async function cleanExpiredTokens() {
     }
   } catch (err) {
     console.error("[Blacklist Cleanup Error]:", err.message);
+  }
+}
+
+async function ensureSchemaMigration() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "course_lessons" ADD COLUMN IF NOT EXISTS "hls_url" TEXT;
+      ALTER TABLE "course_lessons" ADD COLUMN IF NOT EXISTS "hls_path" TEXT;
+    `);
+    console.log(" [DB Migration] Verified course_lessons schema columns (hls_url, hls_path).");
+  } catch (err) {
+    console.warn(" [DB Migration Warning]:", err.message);
   }
 }
 
@@ -51,6 +63,9 @@ async function startServer() {
     // Test database connection
     await prisma.$connect();
     console.log(" Connected to PostgreSQL Database successfully via Prisma ORM.");
+
+    // Auto-migrate newly added columns safely
+    await ensureSchemaMigration();
 
     // Run cleanup on startup
     await cleanExpiredTokens();
