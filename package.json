@@ -5,7 +5,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "build": "prisma generate && prisma db push --accept-data-loss",
+    "build": "prisma generate",
     "start": "node server.js",
     "dev": "node --watch-path=src --watch-path=server.js server.js",
     "postinstall": "prisma generate",
