@@ -13,6 +13,9 @@ const saveLessonProgressParamsSchema = z.object({
 
 const saveLessonProgressBodySchema = z.object({
   progress_seconds: z.number().nonnegative().optional(),
+  last_position: z.number().nonnegative().optional(),
+  lastPosition: z.number().nonnegative().optional(),
+  duration: z.number().nonnegative().optional(),
   completed: z.boolean().optional(),
 });
 
@@ -67,11 +70,8 @@ export class CourseController {
   static async saveLessonProgress(req, res, next) {
     try {
       const { courseId, lessonId } = saveLessonProgressParamsSchema.parse(req.params);
-      const { progress_seconds, completed } = saveLessonProgressBodySchema.parse(req.body);
-      const result = await CourseService.saveLessonProgress(req.user.id, courseId, lessonId, {
-        progress_seconds,
-        completed,
-      });
+      const body = saveLessonProgressBodySchema.parse(req.body);
+      const result = await CourseService.saveLessonProgress(req.user.id, courseId, lessonId, body);
       return successResponse(res, result, "Progress updated successfully");
     } catch (err) {
       next(err);

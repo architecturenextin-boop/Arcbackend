@@ -1,6 +1,8 @@
-﻿import path from "path";
-import { r2Service } from "./r2.service.js";
 import { prisma } from "../config/db.js";
+import { r2Service } from "./r2.service.js";
+import { config } from "../config/env.js";
+import { signStreamToken } from "../utils/stream-token.js";
+import path from "path";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -139,6 +141,7 @@ export class CourseService {
     });
 
     const progressMap = new Map(progressRecords.map((p) => [p.lesson_id, p]));
+    const workerBase = config.streamWorkerUrl || "https://media.architecturenext.in";
 
     // Sanitize lessons based on enrollment status
     const securedModules = await Promise.all(
@@ -155,24 +158,19 @@ export class CourseService {
             if (canAccessVideo) {
               const rawVideo = l.video_url || l.video_path;
               if (rawVideo) {
-                if (rawVideo.startsWith("http://") || rawVideo.startsWith("https://")) {
+                const isExternal = rawVideo.includes("youtube.com") || rawVideo.includes("youtu.be") || rawVideo.includes("vimeo.com");
+                
+                if (isExternal) {
                   resolvedVideoUrl = rawVideo;
-                } else if (r2Service.isConfigured()) {
-                  const cleanFilename = path.basename(rawVideo.split("?")[0]);
-                  try {
-                    resolvedVideoUrl = await r2Service.getPresignedDownloadUrl({
-                      key: "videos/" + cleanFilename,
-                      expiresIn: 14400,
-                    });
-                  } catch (_) {
-                    resolvedVideoUrl = l.video_url;
-                  }
                 } else {
-                  resolvedVideoUrl = l.video_url;
+                  // Generate signed HMAC stream token for Cloudflare Edge Worker
+                  const streamToken = signStreamToken(
+                    { lessonId: l.id, userId: user.id, expiresInSeconds: 14400 },
+                    config.streamSigningSecret
+                  );
+                  resolvedHlsUrl = `${workerBase}/hls/${l.id}/master.m3u8?token=${encodeURIComponent(streamToken)}`;
+                  resolvedVideoUrl = resolvedHlsUrl;
                 }
-
-                // Adaptive HLS streaming endpoint derived per lesson
-                resolvedHlsUrl = `/api/v1/media/hls/${l.id}/master.m3u8`;
               }
 
               const rawPdf = l.pdf_url || l.pdf_path;
@@ -195,6 +193,9 @@ export class CourseService {
               }
             }
 
+            const lastPosition = progress ? Number(progress.last_position || progress.progress_seconds || 0) : 0;
+            const progressSeconds = progress ? Number(progress.progress_seconds || Math.floor(lastPosition)) : 0;
+
             return {
               id: l.id,
               module_id: l.module_id,
@@ -209,7 +210,9 @@ export class CourseService {
               hls_url: resolvedHlsUrl,
               pdf_url: resolvedPdfUrl,
               pdf_path: resolvedPdfUrl,
-              progress_seconds: progress ? progress.progress_seconds : 0,
+              last_position: lastPosition,
+              lastPosition: lastPosition,
+              progress_seconds: progressSeconds,
               completed: progress ? progress.completed : false,
               last_watched_at: progress ? progress.last_watched_at : null,
             };
@@ -230,11 +233,77 @@ export class CourseService {
       },
       isEnrolled,
       isAdmin,
-      progress: progressRecords,
+      progress: progressRecords.map((p) => ({
+        ...p,
+        last_position: Number(p.last_position || p.progress_seconds || 0),
+        lastPosition: Number(p.last_position || p.progress_seconds || 0),
+      })),
     };
   }
 
-  static async saveLessonProgress(userId, courseId, lessonId, { progress_seconds = 0, completed = true }) {
+  static async getLessonProgress(userId, lessonId) {
+    const record = await prisma.lessonProgress.findUnique({
+      where: {
+        user_id_lesson_id: {
+          user_id: userId,
+          lesson_id: lessonId,
+        },
+      },
+    });
+
+    if (!record) {
+      return {
+        lesson_id: lessonId,
+        last_position: 0,
+        lastPosition: 0,
+        progress_seconds: 0,
+        completed: false,
+        last_watched_at: null,
+      };
+    }
+
+    const lastPosition = Number(record.last_position || record.progress_seconds || 0);
+
+    return {
+      id: record.id,
+      lesson_id: record.lesson_id,
+      course_id: record.course_id,
+      last_position: lastPosition,
+      lastPosition: lastPosition,
+      progress_seconds: record.progress_seconds || Math.floor(lastPosition),
+      completed: record.completed,
+      last_watched_at: record.last_watched_at,
+    };
+  }
+
+  static async saveLessonProgress(userId, courseId, lessonId, payload = {}) {
+    const {
+      progress_seconds,
+      last_position,
+      lastPosition,
+      completed,
+      duration,
+    } = payload;
+
+    // Resolve target course_id if not supplied directly
+    let resolvedCourseId = courseId;
+    if (!resolvedCourseId) {
+      const lesson = await prisma.courseLesson.findUnique({
+        where: { id: lessonId },
+        include: { module: true },
+      });
+      if (!lesson || !lesson.module) {
+        throw new Error("Lesson or parent course module not found");
+      }
+      resolvedCourseId = lesson.module.course_id;
+    }
+
+    const rawPos = last_position !== undefined 
+      ? Number(last_position) 
+      : (lastPosition !== undefined ? Number(lastPosition) : (progress_seconds !== undefined ? Number(progress_seconds) : 0));
+    const safeLastPosition = Math.max(0, isNaN(rawPos) ? 0 : rawPos);
+    const safeProgressSeconds = Math.floor(safeLastPosition);
+
     const existing = await prisma.lessonProgress.findUnique({
       where: {
         user_id_lesson_id: {
@@ -244,12 +313,25 @@ export class CourseService {
       },
     });
 
+    // Auto mark completed at 90%+ duration
+    let isCompleted = completed !== undefined ? Boolean(completed) : (existing ? existing.completed : false);
+    if (!isCompleted && duration && Number(duration) > 0) {
+      if (safeLastPosition / Number(duration) >= 0.90) {
+        isCompleted = true;
+      }
+    } else if (existing && existing.completed) {
+      if (completed === undefined) {
+        isCompleted = true;
+      }
+    }
+
     if (existing) {
       return await prisma.lessonProgress.update({
         where: { id: existing.id },
         data: {
-          progress_seconds: Number(progress_seconds) || 0,
-          completed: Boolean(completed),
+          last_position: safeLastPosition,
+          progress_seconds: safeProgressSeconds,
+          completed: isCompleted,
           last_watched_at: new Date(),
         },
       });
@@ -258,10 +340,11 @@ export class CourseService {
     return await prisma.lessonProgress.create({
       data: {
         user_id: userId,
-        course_id: courseId,
+        course_id: resolvedCourseId,
         lesson_id: lessonId,
-        progress_seconds: Number(progress_seconds) || 0,
-        completed: Boolean(completed),
+        last_position: safeLastPosition,
+        progress_seconds: safeProgressSeconds,
+        completed: isCompleted,
         last_watched_at: new Date(),
       },
     });

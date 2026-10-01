@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authRoutes from "./auth.routes.js";
 import courseRoutes from "./course.routes.js";
+import lessonRoutes from "./lesson.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import paymentRoutes from "./payment.routes.js";
 import adminRoutes from "./admin.routes.js";
@@ -16,6 +17,7 @@ router.get("/health", (req, res) => {
 
 router.use("/auth", authRoutes);
 router.use("/courses", courseRoutes);
+router.use("/lessons", lessonRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/users/me", dashboardRoutes); // Aliased for REST convention
 router.use("/payments", paymentRoutes);

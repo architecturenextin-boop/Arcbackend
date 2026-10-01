@@ -70,6 +70,8 @@ model User {
   otps                   Otp[]
   password_reset_tokens  PasswordResetToken[]
   coupon_redemptions     CouponRedemption[]
+  offline_licenses       OfflineLicense[]
+  download_audit_logs    DownloadAuditLog[]
 
   @@map("users")
   @@index([email])
@@ -111,6 +113,7 @@ model Course {
   progress            LessonProgress[]
   testimonials        Testimonial[]
   coupons             Coupon[]
+  offline_licenses    OfflineLicense[]
 
   @@map("courses")
   @@index([slug])
@@ -136,22 +139,26 @@ model CourseModule {
 }
 
 model CourseLesson {
-  id          String           @id @default(uuid()) @db.Uuid
-  module_id   String           @db.Uuid
-  title       String
-  description String?          @db.Text
-  duration    String?          @default("15:00")
-  video_url   String?
-  video_path  String?
-  pdf_url     String?
-  pdf_path    String?
-  is_free     Boolean          @default(false)
-  sort_order  Int              @default(0)
-  created_at  DateTime         @default(now())
-  updated_at  DateTime         @updatedAt
+  id                  String             @id @default(uuid()) @db.Uuid
+  module_id           String             @db.Uuid
+  title               String
+  description         String?            @db.Text
+  duration            String?            @default("15:00")
+  video_url           String?
+  video_path          String?
+  pdf_url             String?
+  pdf_path            String?
+  hls_url             String?
+  hls_path            String?
+  is_free             Boolean            @default(false)
+  sort_order          Int                @default(0)
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @updatedAt
 
-  module      CourseModule     @relation(fields: [module_id], references: [id], onDelete: Cascade)
-  progress    LessonProgress[]
+  module              CourseModule       @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  progress            LessonProgress[]
+  offline_licenses    OfflineLicense[]
+  download_audit_logs DownloadAuditLog[]
 
   @@map("course_lessons")
   @@index([module_id])
@@ -264,7 +271,8 @@ model LessonProgress {
   course_id        String       @db.Uuid
   lesson_id        String       @db.Uuid
   progress_seconds Int          @default(0)
-  completed        Boolean      @default(true)
+  last_position    Float        @default(0)
+  completed        Boolean      @default(false)
   last_watched_at  DateTime     @default(now())
   created_at       DateTime     @default(now())
   updated_at       DateTime     @updatedAt
@@ -278,6 +286,47 @@ model LessonProgress {
   @@index([user_id])
   @@index([course_id])
   @@index([lesson_id])
+}
+
+model OfflineLicense {
+  id               String       @id @default(uuid()) @db.Uuid
+  user_id          String       @db.Uuid
+  lesson_id        String       @db.Uuid
+  course_id        String       @db.Uuid
+  key_id           String       @unique
+  encrypted_key    String       @db.Text
+  expires_at       DateTime
+  revoked          Boolean      @default(false)
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+
+  user             User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  lesson           CourseLesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+  course           Course       @relation(fields: [course_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([lesson_id])
+  @@index([expires_at])
+  @@map("offline_licenses")
+}
+
+model DownloadAuditLog {
+  id               String       @id @default(uuid()) @db.Uuid
+  user_id          String       @db.Uuid
+  lesson_id        String       @db.Uuid
+  action           String
+  device_info      String?
+  ip_address       String?
+  created_at       DateTime     @default(now())
+
+  user             User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  lesson           CourseLesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([lesson_id])
+  @@index([action])
+  @@index([created_at])
+  @@map("download_audit_logs")
 }
 
 enum OtpPurpose {
@@ -354,5 +403,3 @@ model Testimonial {
   @@index([course_id])
   @@index([created_at])
 }
-
-
