@@ -25,7 +25,7 @@ export const config = {
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   streamSigningSecret: process.env.STREAM_SIGNING_SECRET || jwtSecret,
-  streamWorkerUrl: (process.env.STREAM_WORKER_URL || "https://media.architecturenext.in").replace(/\/$/, ""),
+  streamWorkerUrl: (process.env.STREAM_WORKER_URL || "").replace(/\/$/, ""),
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
   appUrl: process.env.APP_URL || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",

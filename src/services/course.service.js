@@ -141,7 +141,7 @@ export class CourseService {
     });
 
     const progressMap = new Map(progressRecords.map((p) => [p.lesson_id, p]));
-    const workerBase = config.streamWorkerUrl || "https://media.architecturenext.in";
+    const workerBase = config.streamWorkerUrl || "";
 
     // Sanitize lessons based on enrollment status
     const securedModules = await Promise.all(
@@ -159,17 +159,32 @@ export class CourseService {
               const rawVideo = l.video_url || l.video_path;
               if (rawVideo) {
                 const isExternal = rawVideo.includes("youtube.com") || rawVideo.includes("youtu.be") || rawVideo.includes("vimeo.com");
-                
+                const isExplicitHls = rawVideo.includes(".m3u8") || rawVideo.includes("/manifest/") || rawVideo.includes("/hls/");
+                const isDirectHttp = rawVideo.startsWith("http://") || rawVideo.startsWith("https://");
+
                 if (isExternal) {
                   resolvedVideoUrl = rawVideo;
-                } else {
-                  // Generate signed HMAC stream token for Cloudflare Edge Worker
+                } else if (isExplicitHls && config.streamWorkerUrl) {
                   const streamToken = signStreamToken(
                     { lessonId: l.id, userId: user.id, expiresInSeconds: 14400 },
                     config.streamSigningSecret
                   );
-                  resolvedHlsUrl = `${workerBase}/hls/${l.id}/master.m3u8?token=${encodeURIComponent(streamToken)}`;
+                  resolvedHlsUrl = `${config.streamWorkerUrl}/hls/${l.id}/master.m3u8?token=${encodeURIComponent(streamToken)}`;
                   resolvedVideoUrl = resolvedHlsUrl;
+                } else if (isDirectHttp) {
+                  resolvedVideoUrl = rawVideo;
+                } else if (r2Service.isConfigured()) {
+                  const cleanFilename = path.basename(rawVideo.split("?")[0]);
+                  try {
+                    resolvedVideoUrl = await r2Service.getPresignedDownloadUrl({
+                      key: "videos/" + cleanFilename,
+                      expiresIn: 14400,
+                    });
+                  } catch (_) {
+                    resolvedVideoUrl = rawVideo;
+                  }
+                } else {
+                  resolvedVideoUrl = rawVideo;
                 }
               }
 

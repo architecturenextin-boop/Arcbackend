@@ -255,7 +255,7 @@ export class MediaController {
         res.cookie("stream_token", streamToken, cookieOptions);
       } catch (_) {}
 
-      const workerBase = config.streamWorkerUrl || "https://media.architecturenext.in";
+      const workerBase = config.streamWorkerUrl || "";
       const targetFileName = requestedFile ? path.basename(requestedFile) : "master.m3u8";
       const workerUrl = `${workerBase}/hls/${lessonId}/${targetFileName}?token=${encodeURIComponent(streamToken)}`;
 
