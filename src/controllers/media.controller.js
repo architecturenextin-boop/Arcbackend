@@ -139,6 +139,11 @@ export class MediaController {
       }
 
       if (r2Service.isConfigured()) {
+        const publicUrl = r2Service.getPublicUrl(`videos/${cleanFilename}`);
+        if (publicUrl) {
+          return res.redirect(302, publicUrl);
+        }
+
         const possibleKeys = [
           `videos/${cleanFilename}`,
           cleanFilename,

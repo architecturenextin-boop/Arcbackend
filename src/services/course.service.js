@@ -175,13 +175,18 @@ export class CourseService {
                   resolvedVideoUrl = rawVideo;
                 } else if (r2Service.isConfigured()) {
                   const cleanFilename = path.basename(rawVideo.split("?")[0]);
-                  try {
-                    resolvedVideoUrl = await r2Service.getPresignedDownloadUrl({
-                      key: "videos/" + cleanFilename,
-                      expiresIn: 14400,
-                    });
-                  } catch (_) {
-                    resolvedVideoUrl = rawVideo;
+                  const cdnUrl = r2Service.getPublicUrl("videos/" + cleanFilename);
+                  if (cdnUrl) {
+                    resolvedVideoUrl = cdnUrl;
+                  } else {
+                    try {
+                      resolvedVideoUrl = await r2Service.getPresignedDownloadUrl({
+                        key: "videos/" + cleanFilename,
+                        expiresIn: 14400,
+                      });
+                    } catch (_) {
+                      resolvedVideoUrl = rawVideo;
+                    }
                   }
                 } else {
                   resolvedVideoUrl = rawVideo;

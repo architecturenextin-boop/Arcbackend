@@ -43,7 +43,7 @@ export const config = {
     accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
     bucketName: process.env.R2_BUCKET_NAME || "",
-    publicUrl: process.env.R2_PUBLIC_URL || process.env.R2_CUSTOM_DOMAIN || "",
+    publicUrl: process.env.R2_PUBLIC_URL || process.env.R2_CUSTOM_DOMAIN || "https://pub-546c2bd8770e4787bf1c680e83ad86d9.r2.dev",
     endpoint: process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : ""),
   },
 };
