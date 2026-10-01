@@ -8,6 +8,11 @@ generator client {
   binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+}
+
 enum Role {
   STUDENT
   ADMIN
@@ -40,7 +45,9 @@ enum DiscountType {
 model User {
   id                     String           @id @default(uuid()) @db.Uuid
   email                  String           @unique
-  password_hash          String
+  password_hash          String?
+  google_id              String?          @unique @map("google_id")
+  auth_provider          AuthProvider     @default(EMAIL) @map("auth_provider")
   first_name             String?
   last_name              String?
   full_name              String?
@@ -66,6 +73,7 @@ model User {
 
   @@map("users")
   @@index([email])
+  @@index([google_id])
   @@index([role])
 }
 

@@ -86,9 +86,10 @@ export class AdminService {
       totalCourses,
       publishedCourses,
       totalEnrollments,
-      payments,
+      completedPayments,
       recentUsers,
       recentEnrollments,
+      allPaymentsData,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: "STUDENT" } }),
@@ -97,7 +98,7 @@ export class AdminService {
       prisma.enrollment.count({ where: { status: "ACTIVE" } }),
       prisma.payment.findMany({
         where: { status: "COMPLETED" },
-        select: { amount: true },
+        select: { amount: true, finalAmount: true },
       }),
       prisma.user.findMany({
         take: 5,
@@ -114,7 +115,7 @@ export class AdminService {
         },
       }),
       prisma.enrollment.findMany({
-        take: 5,
+        take: 10,
         orderBy: { enrolled_at: "desc" },
         include: {
           user: {
@@ -135,11 +136,16 @@ export class AdminService {
               cover_url: true,
             },
           },
+          payment: true,
         },
       }),
+      AdminService.getAllPayments({ limit: 10 }),
     ]);
 
-    const totalRevenue = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalRevenue = completedPayments.reduce(
+      (sum, p) => sum + (Number(p.finalAmount ?? p.amount) || 0),
+      0
+    );
 
     return {
       stats: {
@@ -150,8 +156,9 @@ export class AdminService {
         totalEnrollments,
         totalRevenue,
       },
-      recentUsers,
+      recentTransactions: allPaymentsData.payments.slice(0, 8),
       recentEnrollments,
+      recentUsers,
     };
   }
 
@@ -503,6 +510,24 @@ export class AdminService {
   }
 
   static async manualEnrollStudent({ userId, courseId }) {
+    const course = await prisma.course.findUnique({ where: { id: courseId } });
+
+    // Create a tracked manual payment entry
+    const payment = await prisma.payment.create({
+      data: {
+        user_id: userId,
+        course_id: courseId,
+        amount: course?.price || 0,
+        originalAmount: course?.original_price || course?.price || 0,
+        finalAmount: course?.price || 0,
+        currency: "INR",
+        gateway: "manual",
+        gateway_order_id: `MANUAL_${crypto.randomBytes(4).toString("hex").toUpperCase()}`,
+        status: "COMPLETED",
+        paid_at: new Date(),
+      },
+    });
+
     const enrollment = await prisma.enrollment.upsert({
       where: {
         user_id_course_id: {
@@ -513,10 +538,12 @@ export class AdminService {
       create: {
         user_id: userId,
         course_id: courseId,
+        payment_id: payment.id,
         status: "ACTIVE",
         enrolled_at: new Date(),
       },
       update: {
+        payment_id: payment.id,
         status: "ACTIVE",
         enrolled_at: new Date(),
       },
@@ -549,9 +576,8 @@ export class AdminService {
   }
 
   static async getAllPayments({ page, limit } = {}) {
-    const total = await prisma.payment.count();
-
-    const query = {
+    // 1. Fetch all payment records with relations
+    const payments = await prisma.payment.findMany({
       include: {
         user: {
           select: {
@@ -566,25 +592,87 @@ export class AdminService {
             id: true,
             title: true,
             price: true,
+            original_price: true,
             currency: true,
+          },
+        },
+        coupon: {
+          select: {
+            id: true,
+            code: true,
+            discountType: true,
+            discountValue: true,
           },
         },
       },
       orderBy: { created_at: "desc" },
-    };
+    });
 
-    if (page && limit) {
-      query.skip = (page - 1) * limit;
-      query.take = limit;
-    }
+    // 2. Fetch direct/manual/imported enrollments that don't have a linked payment record
+    const linkedPaymentIds = new Set(payments.map((p) => p.id));
+    const directEnrollments = await prisma.enrollment.findMany({
+      where: {
+        OR: [
+          { payment_id: null },
+          { payment_id: { notIn: Array.from(linkedPaymentIds) } },
+        ],
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            full_name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        course: {
+          select: {
+            id: true,
+            title: true,
+            price: true,
+            original_price: true,
+            currency: true,
+          },
+        },
+      },
+      orderBy: { enrolled_at: "desc" },
+    });
 
-    const payments = await prisma.payment.findMany(query);
+    // 3. Format direct/manual enrollments
+    const manualFormatted = directEnrollments.map((e) => ({
+      id: `enrollment_${e.id}`,
+      user_id: e.user_id,
+      course_id: e.course_id,
+      amount: e.course?.price || 0,
+      originalAmount: e.course?.original_price || e.course?.price || 0,
+      discountAmount: 0,
+      finalAmount: e.course?.price || 0,
+      currency: "INR",
+      gateway: "manual",
+      gateway_order_id: `MANUAL_${e.id.substring(0, 8).toUpperCase()}`,
+      gateway_payment_id: null,
+      status: e.status === "ACTIVE" ? "completed" : e.status.toLowerCase(),
+      paid_at: e.enrolled_at || e.created_at,
+      created_at: e.enrolled_at || e.created_at,
+      studentName: e.user?.full_name || e.user?.email || "Learner",
+      studentEmail: e.user?.email || "No email",
+      studentPhone: e.user?.phone || "",
+      courseTitle: e.course?.title || "Course Access",
+      orderId: `MANUAL_${e.id.substring(0, 8).toUpperCase()}`,
+      paymentId: "Direct Enrollment",
+      couponCode: null,
+    }));
 
-    const formatted = payments.map((p) => ({
+    // 4. Format gateway payments
+    const gatewayFormatted = payments.map((p) => ({
       id: p.id,
       user_id: p.user_id,
       course_id: p.course_id,
-      amount: p.amount,
+      amount: p.finalAmount ?? p.amount,
+      originalAmount: p.originalAmount ?? p.course?.original_price ?? p.amount,
+      discountAmount: p.discountAmount ?? 0,
+      finalAmount: p.finalAmount ?? p.amount,
       currency: p.currency || "INR",
       gateway: p.gateway || "razorpay",
       gateway_order_id: p.gateway_order_id,
@@ -598,9 +686,21 @@ export class AdminService {
       courseTitle: p.course?.title || "Course Access",
       orderId: p.gateway_order_id || p.id.substring(0, 12),
       paymentId: p.gateway_payment_id || "",
+      couponCode: p.couponCode || p.coupon?.code || null,
     }));
 
-    return { payments: formatted, total };
+    // 5. Combine and sort by date descending
+    const allCombined = [...gatewayFormatted, ...manualFormatted].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    const total = allCombined.length;
+    let paginated = allCombined;
+    if (page && limit) {
+      paginated = allCombined.slice((page - 1) * limit, page * limit);
+    }
+
+    return { payments: paginated, total };
   }
 }
 

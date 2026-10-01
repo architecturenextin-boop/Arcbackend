@@ -16,6 +16,7 @@ router.post("/register", registerLimiter, AuthController.register);
 router.post("/verify-otp", verifyOtpLimiter, AuthController.verifySignupOtp);
 router.post("/resend-otp", resendOtpLimiter, AuthController.resendOtp);
 router.post("/login", loginLimiter, AuthController.login);
+router.post("/google", loginLimiter, AuthController.googleAuth);
 router.post("/logout", AuthController.logout);
 router.get("/me", requireAuth, AuthController.getMe);
 router.put("/profile", requireAuth, AuthController.updateProfile);

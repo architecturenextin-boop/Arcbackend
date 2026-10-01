@@ -44,6 +44,10 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const googleAuthSchema = z.object({
+  credential: z.string().min(1, "Google credential token is required"),
+});
+
 const updateProfileSchema = z.object({
   first_name: z.string().max(100).optional(),
   last_name: z.string().max(100).optional(),
@@ -123,6 +127,24 @@ export class AuthController {
           email: err.email,
         });
       }
+      next(err);
+    }
+  }
+
+  static async googleAuth(req, res, next) {
+    try {
+      const validated = googleAuthSchema.parse(req.body);
+      const result = await AuthService.googleAuth(validated);
+
+      res.cookie("token", result.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: "lax",
+      });
+
+      return successResponse(res, result, "Logged in with Google successfully");
+    } catch (err) {
       next(err);
     }
   }
