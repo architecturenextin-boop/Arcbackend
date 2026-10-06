@@ -42,7 +42,7 @@ export class AuthService {
           throw err;
         }
 
-        // Account exists but not verified yet – update details and resend fresh OTP
+        // Account exists but not verified yet ï¿½ update details and resend fresh OTP
         user = await prisma.user.update({
           where: { id: existing.id },
           data: {
@@ -151,11 +151,17 @@ export class AuthService {
       data: { is_verified: true },
     });
 
-    // Send welcome email
-    await EmailService.sendWelcomeEmail(
-      updatedUser.email,
-      updatedUser.first_name || updatedUser.full_name || "Learner"
-    );
+    // Send welcome email (non-blocking / error-safe)
+    try {
+      if (typeof EmailService?.sendWelcomeEmail === "function") {
+        await EmailService.sendWelcomeEmail(
+          updatedUser.email,
+          updatedUser.first_name || updatedUser.full_name || "Learner"
+        );
+      }
+    } catch (emailErr) {
+      console.error("[EMAIL NON-CRITICAL] Failed to send welcome email on signup verification:", emailErr?.message);
+    }
 
     const token = signToken({ userId: updatedUser.id, role: updatedUser.role });
 
@@ -502,11 +508,19 @@ export class AuthService {
         },
       });
 
-      // Send welcome email in background
-      EmailService.sendWelcomeEmail(
-        user.email,
-        user.first_name || user.full_name || "Learner"
-      ).catch(() => {});
+      // Send welcome email in background (error-safe)
+      try {
+        if (typeof EmailService?.sendWelcomeEmail === "function") {
+          EmailService.sendWelcomeEmail(
+            user.email,
+            user.first_name || user.full_name || "Learner"
+          ).catch((emailErr) => {
+            console.error("[EMAIL NON-CRITICAL] Failed to send welcome email on Google OAuth:", emailErr?.message);
+          });
+        }
+      } catch (emailErr) {
+        console.error("[EMAIL NON-CRITICAL] Failed to trigger welcome email on Google OAuth:", emailErr?.message);
+      }
     }
 
     const token = signToken({ userId: user.id, role: user.role });

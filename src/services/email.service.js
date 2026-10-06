@@ -1,7 +1,7 @@
 import { sendEmail } from "../utils/mailer.js";
 
 /**
- * Branded HTML Email Template Generator
+ * Branded HTML Email Template Generator for OTPs
  */
 function renderEmailTemplate({ title, subtitle, otp, expiryMinutes = 5, note }) {
   return `
@@ -65,7 +65,80 @@ function renderEmailTemplate({ title, subtitle, otp, expiryMinutes = 5, note }) 
           <tr>
             <td style="padding: 20px 32px; background-color: #0f172a; text-align: center; border-top: 1px solid #334155;">
               <p style="margin: 0; font-size: 12px; color: #64748b;">
-                © ${new Date().getFullYear()} ArchitectureNext Education. All rights reserved.
+                &copy; ${new Date().getFullYear()} ArchitectureNext Education. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+
+/**
+ * Branded HTML Email Template Generator for Welcome Emails
+ */
+function renderWelcomeTemplate({ name }) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to ArchitectureNext</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 540px; background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 32px 24px 32px; text-align: center; border-bottom: 1px solid #334155;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">
+                Architecture<span style="color: #10b981;">Next</span>
+              </h1>
+              <p style="margin: 6px 0 0 0; font-size: 13px; color: #94a3b8; letter-spacing: 0.5px; text-transform: uppercase;">
+                School of Internship
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 32px;">
+              <h2 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #ffffff;">
+                Welcome aboard, ${name}! 🎉
+              </h2>
+              <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: #cbd5e1;">
+                We are thrilled to welcome you to <strong>ArchitectureNext</strong>. Your account is ready, and you now have access to industry-standard learning modules, real-world internships, and expert mentorship.
+              </p>
+
+              <div style="margin: 24px 0; padding: 20px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; text-align: left;">
+                <h3 style="margin: 0 0 10px 0; font-size: 15px; font-weight: 700; color: #10b981;">What you can do next:</h3>
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+                  <li>Explore our curated courses and career tracks</li>
+                  <li>Complete hands-on assignments & capstones</li>
+                  <li>Connect with instructors and fellow learners</li>
+                </ul>
+              </div>
+
+              <p style="margin: 24px 0 0 0; font-size: 13px; line-height: 1.5; color: #64748b; border-top: 1px solid #334155; padding-top: 20px;">
+                If you have any questions or need support getting started, feel free to reply to this email or visit your dashboard.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px; background-color: #0f172a; text-align: center; border-top: 1px solid #334155;">
+              <p style="margin: 0; font-size: 12px; color: #64748b;">
+                &copy; ${new Date().getFullYear()} ArchitectureNext Education. All rights reserved.
               </p>
             </td>
           </tr>
@@ -138,6 +211,32 @@ export class EmailService {
       return res;
     } catch (err) {
       console.error(`[EMAIL ERROR] Failed to send password reset OTP to ${email}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Send Welcome email
+   */
+  static async sendWelcomeEmail(email, name = "Learner") {
+    try {
+      const recipientName = name || "Learner";
+      const subject = `Welcome to ArchitectureNext, ${recipientName}! 🎉`;
+      const html = renderWelcomeTemplate({ name: recipientName });
+
+      const res = await sendEmail({
+        to: email,
+        subject,
+        html,
+        text: `Welcome to ArchitectureNext, ${recipientName}! Your account is now active. Explore courses and start your journey today.`,
+      });
+
+      if (!res.success) {
+        console.error(`[EMAIL ERROR] sendWelcomeEmail failed for ${email}:`, res.error);
+      }
+      return res;
+    } catch (err) {
+      console.error(`[EMAIL ERROR] Failed to send welcome email to ${email}:`, err.message);
       return { success: false, error: err.message };
     }
   }
