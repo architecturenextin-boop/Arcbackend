@@ -17,6 +17,14 @@ const router = Router();
 
 router.use(requireAuth, requireAdmin);
 
+// Disable caching on all admin routes
+router.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 router.get("/overview", AdminController.getOverviewStats);
 
 // Cloudflare R2 direct presigned upload URL
@@ -38,6 +46,8 @@ router.get("/students", AdminController.getAllStudents);
 router.post("/students/enroll", AdminController.manualEnrollStudent);
 router.post("/students/revoke-enrollment", AdminController.revokeStudentEnrollment);
 router.put("/students/:id/role", AdminController.updateStudentRole);
+router.put("/students/:id", AdminController.updateStudent);
+router.delete("/students/:id", AdminController.deleteStudent);
 
 // Payments & Transactions
 router.get("/payments", AdminController.getAllPayments);

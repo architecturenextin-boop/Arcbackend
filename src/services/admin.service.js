@@ -214,6 +214,7 @@ export class AdminService {
           description: courseData.description || "",
           cover_url: courseData.coverUrl || courseData.cover_url || "/course-cover.jpeg",
           thumbnail_url: courseData.coverUrl || courseData.thumbnail_url || courseData.cover_url || "/course-cover.jpeg",
+          certificate_url: courseData.certificateUrl || courseData.certificate_url || null,
           price: Number(courseData.price) || 0,
           original_price: Number(courseData.originalPrice) || Number(courseData.original_price) || 0,
           currency: courseData.currency || "₹",
@@ -236,6 +237,7 @@ export class AdminService {
           description: courseData.description || "",
           cover_url: courseData.coverUrl || courseData.cover_url,
           thumbnail_url: courseData.coverUrl || courseData.thumbnail_url || courseData.cover_url,
+          certificate_url: courseData.certificateUrl !== undefined ? (courseData.certificateUrl || null) : (courseData.certificate_url !== undefined ? (courseData.certificate_url || null) : undefined),
           price: Number(courseData.price) || 0,
           original_price: Number(courseData.originalPrice) || Number(courseData.original_price) || 0,
           currency: courseData.currency || "₹",
@@ -573,6 +575,64 @@ export class AdminService {
     });
 
     return updated;
+  }
+
+  static async updateStudent(userId, data) {
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) {
+      const err = new Error("Student not found");
+      err.status = 404;
+      throw err;
+    }
+    const updateData = {};
+    if (data.full_name !== undefined) updateData.full_name = data.full_name;
+    if (data.email !== undefined) updateData.email = data.email.toLowerCase().trim();
+    if (data.phone !== undefined) updateData.phone = data.phone;
+    if (data.goal !== undefined) updateData.goal = data.goal;
+    if (data.username !== undefined) updateData.username = data.username.toLowerCase().trim();
+    if (data.role !== undefined) updateData.role = data.role.toUpperCase();
+
+    return await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        username: true,
+        phone: true,
+        goal: true,
+        role: true,
+      },
+    });
+  }
+
+  static async deleteStudent(userId, currentAdminId = null) {
+    if (currentAdminId && userId === currentAdminId) {
+      const err = new Error("You cannot delete your own admin account.");
+      err.status = 400;
+      throw err;
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      const err = new Error("Student not found");
+      err.status = 404;
+      throw err;
+    }
+
+    return await prisma.user.delete({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        full_name: true,
+        role: true,
+      },
+    });
   }
 
   static async getAllPayments({ page, limit } = {}) {

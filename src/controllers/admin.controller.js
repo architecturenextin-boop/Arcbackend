@@ -1,4 +1,4 @@
-﻿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { AdminService } from "../services/admin.service.js";
@@ -15,6 +15,8 @@ const upsertCourseSchema = z.object({
     description: z.string().optional().nullable(),
     coverUrl: z.string().max(1000).optional().nullable(),
     cover_url: z.string().max(1000).optional().nullable(),
+    certificateUrl: z.string().max(1000).optional().nullable(),
+    certificate_url: z.string().max(1000).optional().nullable(),
     thumbnail_url: z.string().max(1000).optional().nullable(),
     price: z.number().nonnegative().or(z.string()),
     originalPrice: z.number().nonnegative().or(z.string()).optional().nullable(),
@@ -72,6 +74,10 @@ const manualEnrollSchema = z.object({
 const updateStudentRoleSchema = z.object({
   id: z.string().uuid("Invalid User ID"),
   role: z.enum(["admin", "student", "ADMIN", "STUDENT"]),
+});
+
+const deleteStudentSchema = z.object({
+  id: z.string().uuid("Invalid Student ID"),
 });
 
 export class AdminController {
@@ -171,6 +177,26 @@ export class AdminController {
       });
       const updated = await AdminService.updateStudentRole(id, role);
       return successResponse(res, updated, "User role updated successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateStudent(req, res, next) {
+    try {
+      const studentId = req.params.id;
+      const result = await AdminService.updateStudent(studentId, req.body);
+      return successResponse(res, result, "Student updated successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteStudent(req, res, next) {
+    try {
+      const { id } = deleteStudentSchema.parse(req.params);
+      const result = await AdminService.deleteStudent(id, req.user?.id);
+      return successResponse(res, result, "Student deleted successfully");
     } catch (err) {
       next(err);
     }

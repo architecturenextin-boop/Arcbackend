@@ -87,6 +87,7 @@ model Course {
   description         String?          @db.Text
   cover_url           String?
   thumbnail_url       String?
+  certificate_url     String?
   price               Int              @default(0)
   original_price      Int              @default(0)
   currency            String           @default("INR")
