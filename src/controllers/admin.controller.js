@@ -148,6 +148,17 @@ export class AdminController {
     }
   }
 
+  static async getStudentProgress(req, res, next) {
+    try {
+      const studentId = req.params.id;
+      const result = await AdminService.getStudentProgress(studentId);
+      return successResponse(res, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+
 
   static async revokeStudentEnrollment(req, res, next) {
     try {

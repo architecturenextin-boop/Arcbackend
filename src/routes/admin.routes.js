@@ -43,6 +43,8 @@ router.delete("/courses/:id", AdminController.deleteCourse);
 
 // Student Management
 router.get("/students", AdminController.getAllStudents);
+router.get("/students/:id/progress", AdminController.getStudentProgress);
+router.get("/students/:id", AdminController.getStudentProgress);
 router.post("/students/enroll", AdminController.manualEnrollStudent);
 router.post("/students/revoke-enrollment", AdminController.revokeStudentEnrollment);
 router.put("/students/:id/role", AdminController.updateStudentRole);

@@ -445,6 +445,7 @@ export class AdminService {
 
     const query = {
       include: {
+        progress: true,
         enrollments: {
           include: {
             course: {
@@ -483,11 +484,74 @@ export class AdminService {
       created_at: u.created_at,
       updated_at: u.updated_at,
       enrollments: u.enrollments,
+      progress: u.progress || [],
       coursesCount: u.enrollments.length,
     }));
 
     return { students, total };
   }
+
+  static async getStudentProgress(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        full_name: true,
+        username: true,
+        phone: true,
+        goal: true,
+        role: true,
+        onboarded: true,
+        avatar_url: true,
+        created_at: true,
+        updated_at: true,
+        enrollments: {
+          include: {
+            course: {
+              include: {
+                modules: {
+                  orderBy: { sort_order: "asc" },
+                  include: {
+                    lessons: {
+                      orderBy: { sort_order: "asc" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        progress: {
+          include: {
+            lesson: {
+              select: {
+                id: true,
+                title: true,
+                module_id: true,
+                duration: true,
+              },
+            },
+          },
+          orderBy: { last_watched_at: "desc" },
+        },
+      },
+    });
+
+    if (!user) {
+      const err = new Error("Student not found");
+      err.status = 404;
+      throw err;
+    }
+
+    return {
+      ...user,
+      role: user.role.toLowerCase(),
+    };
+  }
+
 
 
   static async revokeStudentEnrollment({ userId, courseId, enrollmentId }) {
