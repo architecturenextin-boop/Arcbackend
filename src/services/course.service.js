@@ -388,4 +388,9 @@ export class CourseService {
 
     return { message: "Progress reset successfully" };
   }
+
+  static async getPublicEnrollmentCount() {
+    const count = await prisma.enrollment.count({ where: { status: "ACTIVE" } });
+    return count;
+  }
 }

@@ -87,4 +87,13 @@ export class CourseController {
       next(err);
     }
   }
+
+  static async getEnrollmentCount(req, res, next) {
+    try {
+      const count = await CourseService.getPublicEnrollmentCount();
+      return successResponse(res, { count });
+    } catch (err) {
+      next(err);
+    }
+  }
 }

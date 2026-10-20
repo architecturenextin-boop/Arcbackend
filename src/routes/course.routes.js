@@ -4,6 +4,7 @@ import { requireAuth, optionalAuth } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
+router.get("/stats/enrollment-count", CourseController.getEnrollmentCount);
 router.get("/", CourseController.getAllCourses);
 router.get("/:idOrSlug", optionalAuth, CourseController.getCourse);
 router.get("/:idOrSlug/learn", requireAuth, CourseController.getCourseLearningContent);
