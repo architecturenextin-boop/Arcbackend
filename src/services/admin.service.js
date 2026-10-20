@@ -292,7 +292,7 @@ export class AdminService {
               // Check existing lesson to detect if video or document is being replaced
               const existingLesson = await tx.courseLesson.findUnique({
                 where: { id: lessonId },
-                select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true },
+                select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true, subtitle_url: true, subtitle_path: true },
               });
 
               if (existingLesson) {
@@ -306,6 +306,12 @@ export class AdminService {
                 const newPdf = l.pdf_url || l.pdf_path;
                 if (oldPdf && newPdf && getR2Key(oldPdf, "documents") !== getR2Key(newPdf, "documents")) {
                   safeDeleteR2Media(oldPdf, "documents");
+                }
+
+                const oldSubtitle = existingLesson.subtitle_url || existingLesson.subtitle_path;
+                const newSubtitle = l.subtitle_url || l.subtitle_path;
+                if (oldSubtitle && newSubtitle && getR2Key(oldSubtitle, "subtitles") !== getR2Key(newSubtitle, "subtitles")) {
+                  safeDeleteR2Media(oldSubtitle, "subtitles");
                 }
               }
 
@@ -321,6 +327,8 @@ export class AdminService {
                   video_path: l.video_path || null,
                   pdf_url: l.pdf_url || null,
                   pdf_path: l.pdf_path || null,
+                  subtitle_url: l.subtitle_url || null,
+                  subtitle_path: l.subtitle_path || null,
                   is_free: Boolean(l.is_free),
                   sort_order: lIdx,
                 },
@@ -332,6 +340,8 @@ export class AdminService {
                   video_path: l.video_path || null,
                   pdf_url: l.pdf_url || null,
                   pdf_path: l.pdf_path || null,
+                  subtitle_url: l.subtitle_url || null,
+                  subtitle_path: l.subtitle_path || null,
                   is_free: Boolean(l.is_free),
                   sort_order: lIdx,
                 },
@@ -353,6 +363,9 @@ export class AdminService {
               }
               if (rLesson.pdf_url || rLesson.pdf_path) {
                 safeDeleteR2Media(rLesson.pdf_url || rLesson.pdf_path, "documents");
+              }
+              if (rLesson.subtitle_url || rLesson.subtitle_path) {
+                safeDeleteR2Media(rLesson.subtitle_url || rLesson.subtitle_path, "subtitles");
               }
             }
 
@@ -431,6 +444,9 @@ export class AdminService {
       }
       if (l.pdf_url || l.pdf_path) {
         safeDeleteR2Media(l.pdf_url || l.pdf_path, "documents");
+      }
+      if (l.subtitle_url || l.subtitle_path) {
+        safeDeleteR2Media(l.subtitle_url || l.subtitle_path, "subtitles");
       }
     }
 
