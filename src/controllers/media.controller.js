@@ -101,6 +101,8 @@ export class MediaController {
             OR: [
               { video_path: { contains: cleanFilename } },
               { video_url: { contains: cleanFilename } },
+              { subtitle_path: { contains: cleanFilename } },
+              { subtitle_url: { contains: cleanFilename } },
             ],
           },
           include: {
@@ -146,6 +148,8 @@ export class MediaController {
 
         const possibleKeys = [
           `videos/${cleanFilename}`,
+          `subtitles/${cleanFilename}`,
+          `uploads/subtitles/${cleanFilename}`,
           cleanFilename,
           `uploads/videos/${cleanFilename}`,
         ];
