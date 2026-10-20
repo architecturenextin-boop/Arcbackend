@@ -151,6 +151,8 @@ model CourseLesson {
   pdf_path            String?
   hls_url             String?
   hls_path            String?
+  subtitle_url        String?
+  subtitle_path       String?
   is_free             Boolean            @default(false)
   sort_order          Int                @default(0)
   created_at          DateTime           @default(now())
