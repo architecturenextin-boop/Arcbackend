@@ -354,7 +354,7 @@ export class AdminService {
                 module_id: moduleId,
                 id: { notIn: incomingLessonIds },
               },
-              select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true },
+              select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true, subtitle_url: true, subtitle_path: true },
             });
 
             for (const rLesson of removedLessons) {
@@ -387,7 +387,7 @@ export class AdminService {
           },
           include: {
             lessons: {
-              select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true },
+              select: { video_url: true, video_path: true, pdf_url: true, pdf_path: true, subtitle_url: true, subtitle_path: true },
             },
           },
         });

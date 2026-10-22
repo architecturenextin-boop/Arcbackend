@@ -49,7 +49,10 @@ const upsertCourseSchema = z.object({
       video_path: z.string().max(1000).optional().nullable(),
       pdf_url: z.string().max(1000).optional().nullable(),
       pdf_path: z.string().max(1000).optional().nullable(),
+      subtitle_url: z.string().max(1000).optional().nullable(),
+      subtitle_path: z.string().max(1000).optional().nullable(),
       is_free: z.boolean().optional(),
+      sort_order: z.number().optional().nullable(),
     })).optional(),
   })).optional(),
 });

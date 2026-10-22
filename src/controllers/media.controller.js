@@ -141,18 +141,24 @@ export class MediaController {
       }
 
       if (r2Service.isConfigured()) {
-        const publicUrl = r2Service.getPublicUrl(`videos/${cleanFilename}`);
+        const isSubtitle = cleanFilename.startsWith("subt-") || cleanFilename.endsWith(".vtt") || cleanFilename.endsWith(".srt");
+        const folder = isSubtitle ? "subtitles" : "videos";
+        const publicUrl = r2Service.getPublicUrl(`${folder}/${cleanFilename}`);
         if (publicUrl) {
           return res.redirect(302, publicUrl);
         }
 
-        const possibleKeys = [
-          `videos/${cleanFilename}`,
-          `subtitles/${cleanFilename}`,
-          `uploads/subtitles/${cleanFilename}`,
-          cleanFilename,
-          `uploads/videos/${cleanFilename}`,
-        ];
+        const possibleKeys = isSubtitle
+          ? [
+              `subtitles/${cleanFilename}`,
+              `uploads/subtitles/${cleanFilename}`,
+              cleanFilename,
+            ]
+          : [
+              `videos/${cleanFilename}`,
+              `uploads/videos/${cleanFilename}`,
+              cleanFilename,
+            ];
 
         for (const key of possibleKeys) {
           const exists = await r2Service.objectExists(key);
@@ -163,7 +169,7 @@ export class MediaController {
         }
 
         try {
-          const presignedUrl = await r2Service.getPresignedDownloadUrl({ key: `videos/${cleanFilename}`, expiresIn: 14400 });
+          const presignedUrl = await r2Service.getPresignedDownloadUrl({ key: `${folder}/${cleanFilename}`, expiresIn: 14400 });
           return res.redirect(302, presignedUrl);
         } catch (_) {}
       }

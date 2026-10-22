@@ -49,7 +49,9 @@ export class CourseService {
                 is_free: true,
                 sort_order: true,
                 video_url: true,
+                video_path: true,
                 subtitle_url: true,
+                subtitle_path: true,
                 created_at: true,
                 updated_at: true,
               },
@@ -71,6 +73,7 @@ export class CourseService {
         video_url: l.is_free ? l.video_url : null,
         hls_url: l.is_free && l.video_url ? `/api/v1/media/hls/${l.id}/master.m3u8` : null,
         subtitle_url: l.is_free ? l.subtitle_url : null,
+        subtitle_path: l.is_free ? l.subtitle_path : null,
       })),
     }));
 
