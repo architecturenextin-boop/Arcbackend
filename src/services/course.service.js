@@ -402,6 +402,7 @@ export class CourseService {
 
   static async getPublicEnrollmentCount() {
     const count = await prisma.enrollment.count({ where: { status: "ACTIVE" } });
-    return count;
+    const baseOffset = 100;
+    return baseOffset + count;
   }
 }
