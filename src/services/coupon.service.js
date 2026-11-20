@@ -123,6 +123,62 @@ export class CouponService {
     });
   }
 
+  static async getCourseCoupons(courseId) {
+    let resolvedCourseId = null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+
+    if (isUuid) {
+      resolvedCourseId = courseId;
+    } else if (courseId) {
+      const course = await prisma.course.findFirst({
+        where: { slug: courseId },
+        select: { id: true },
+      });
+      if (course) {
+        resolvedCourseId = course.id;
+      }
+    }
+
+    const where = {
+      isActive: true,
+    };
+
+    if (resolvedCourseId) {
+      where.OR = [
+        { courseId: resolvedCourseId },
+        { courseId: null },
+      ];
+    } else {
+      where.courseId = null;
+    }
+
+    const coupons = await prisma.coupon.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        course: {
+          select: { id: true, title: true, slug: true },
+        },
+        _count: {
+          select: { redemptions: true },
+        },
+      },
+    });
+
+    return coupons.map((coupon) => ({
+      coupon,
+      usagePercentage: coupon.usageLimit
+        ? Math.round((coupon.usedCount / coupon.usageLimit) * 100)
+        : 0,
+      isAvailable: coupon.isActive
+        && (!coupon.expiresAt || new Date() <= new Date(coupon.expiresAt))
+        && (!coupon.usageLimit || coupon.usedCount < coupon.usageLimit),
+      canApply: coupon.isActive
+        && (!coupon.expiresAt || new Date() <= new Date(coupon.expiresAt))
+        && (!coupon.usageLimit || coupon.usedCount < coupon.usageLimit),
+    }));
+  }
+
   static async createCoupon(data) {
     const code = (data.code || "").trim().toUpperCase();
     if (!code || code.length < 4 || code.length > 20 || !/^[A-Z0-9_-]+$/i.test(code)) {

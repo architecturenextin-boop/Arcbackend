@@ -26,7 +26,27 @@ export class CourseService {
     }
 
     const courses = await prisma.course.findMany(query);
-    return { courses, total };
+
+    // Per-course enrollment counts in one grouped query (no N+1 per card).
+    const courseIds = courses.map((course) => course.id);
+    const grouped = courseIds.length
+      ? await prisma.enrollment.groupBy({
+          by: ["course_id"],
+          where: { course_id: { in: courseIds }, status: "ACTIVE" },
+          _count: { _all: true },
+        })
+      : [];
+    const enrollmentCounts = new Map(
+      grouped.map((row) => [row.course_id, row._count._all])
+    );
+
+    return {
+      courses: courses.map((course) => ({
+        ...course,
+        enrollment_count: enrollmentCounts.get(course.id) || 0,
+      })),
+      total,
+    };
   }
 
   static async getCourseBySlugOrId(slugOrId) {

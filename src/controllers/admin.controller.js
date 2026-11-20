@@ -421,4 +421,58 @@ export class AdminController {
       next(err);
     }
   }
+
+  // ==========================================
+  // Data Backup & Storage Management
+  // ==========================================
+  static async getBackups(req, res, next) {
+    try {
+      const data = await AdminService.listStoredBackups();
+      return successResponse(res, data, "Backups retrieved successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async createBackup(req, res, next) {
+    try {
+      const backup = await AdminService.createAndStoreBackup();
+      return successResponse(res, backup, "Backup created and stored successfully", 201);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async downloadBackup(req, res, next) {
+    try {
+      const { filename } = req.query;
+      if (filename) {
+        const filePath = AdminService.getBackupFilePath(filename);
+        res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filename)}"`);
+        res.setHeader("Content-Type", "application/json");
+        return res.sendFile(filePath);
+      }
+      const backupData = await AdminService.getFullBackupData();
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const liveFilename = `skillspring_live_backup_${dateStr}.json`;
+      res.setHeader("Content-Disposition", `attachment; filename="${liveFilename}"`);
+      res.setHeader("Content-Type", "application/json");
+      return res.send(JSON.stringify(backupData, null, 2));
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async deleteBackup(req, res, next) {
+    try {
+      const { filename } = req.params;
+      AdminService.deleteStoredBackup(filename);
+      return successResponse(res, { deleted: true }, "Backup deleted successfully");
+    } catch (err) {
+      next(err);
+    }
+  }
 }
+

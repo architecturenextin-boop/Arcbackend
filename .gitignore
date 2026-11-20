@@ -21,3 +21,6 @@ uploads/images/
 uploads/hls/
 uploads/
 
+
+# Auto-generated backup dumps
+backups/backup_*.json

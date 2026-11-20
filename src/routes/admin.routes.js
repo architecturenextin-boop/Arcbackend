@@ -68,4 +68,11 @@ router.put("/coupons/:id", CouponController.update);
 router.patch("/coupons/:id/toggle", CouponController.toggle);
 router.delete("/coupons/:id", CouponController.delete);
 
+
+// Data Backup & Storage
+router.get("/backup", AdminController.getBackups);
+router.post("/backup", AdminController.createBackup);
+router.get("/backup/download", AdminController.downloadBackup);
+router.delete("/backup/:filename", AdminController.deleteBackup);
+
 export default router;

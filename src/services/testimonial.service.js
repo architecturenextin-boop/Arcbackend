@@ -10,9 +10,10 @@ export const testimonialService = {
     };
 
     if (courseId) {
-      where.course = {
-        OR: [{ id: courseId }, { slug: courseId }],
-      };
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+      where.course = isUuid
+        ? { OR: [{ id: courseId }, { slug: courseId }] }
+        : { slug: courseId };
     }
 
     const testimonials = await prisma.testimonial.findMany({

@@ -31,6 +31,16 @@ export class CouponController {
       next(err);
     }
   }
+  static async getCourseCoupons(req, res, next) {
+    try {
+      const { courseId } = req.params;
+      const coupons = await CouponService.getCourseCoupons(courseId);
+      return successResponse(res, coupons);
+    } catch (err) {
+      next(err);
+    }
+  }
+
 
   static async create(req, res, next) {
     try {

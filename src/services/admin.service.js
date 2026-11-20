@@ -1,3 +1,4 @@
+import fs from "fs";
 import crypto from "crypto";
 import path from "path";
 import { prisma } from "../config/db.js";
@@ -202,7 +203,9 @@ export class AdminService {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
 
-    return await prisma.$transaction(async (tx) => {
+    const mediaToDelete = [];
+
+    const course = await prisma.$transaction(async (tx) => {
       // 1. Upsert course record
       const course = await tx.course.upsert({
         where: { id: courseId },
@@ -299,19 +302,19 @@ export class AdminService {
                 const oldVideo = existingLesson.video_url || existingLesson.video_path;
                 const newVideo = l.video_url || l.video_path;
                 if (oldVideo && newVideo && getR2Key(oldVideo, "videos") !== getR2Key(newVideo, "videos")) {
-                  safeDeleteR2Media(oldVideo, "videos");
+                  mediaToDelete.push({ urlOrPath: oldVideo, folder: "videos" });
                 }
 
                 const oldPdf = existingLesson.pdf_url || existingLesson.pdf_path;
                 const newPdf = l.pdf_url || l.pdf_path;
                 if (oldPdf && newPdf && getR2Key(oldPdf, "documents") !== getR2Key(newPdf, "documents")) {
-                  safeDeleteR2Media(oldPdf, "documents");
+                  mediaToDelete.push({ urlOrPath: oldPdf, folder: "documents" });
                 }
 
                 const oldSubtitle = existingLesson.subtitle_url || existingLesson.subtitle_path;
                 const newSubtitle = l.subtitle_url || l.subtitle_path;
                 if (oldSubtitle && newSubtitle && getR2Key(oldSubtitle, "subtitles") !== getR2Key(newSubtitle, "subtitles")) {
-                  safeDeleteR2Media(oldSubtitle, "subtitles");
+                  mediaToDelete.push({ urlOrPath: oldSubtitle, folder: "subtitles" });
                 }
               }
 
@@ -359,13 +362,13 @@ export class AdminService {
 
             for (const rLesson of removedLessons) {
               if (rLesson.video_url || rLesson.video_path) {
-                safeDeleteR2Media(rLesson.video_url || rLesson.video_path, "videos");
+                mediaToDelete.push({ urlOrPath: rLesson.video_url || rLesson.video_path, folder: "videos" });
               }
               if (rLesson.pdf_url || rLesson.pdf_path) {
-                safeDeleteR2Media(rLesson.pdf_url || rLesson.pdf_path, "documents");
+                mediaToDelete.push({ urlOrPath: rLesson.pdf_url || rLesson.pdf_path, folder: "documents" });
               }
               if (rLesson.subtitle_url || rLesson.subtitle_path) {
-                safeDeleteR2Media(rLesson.subtitle_url || rLesson.subtitle_path, "subtitles");
+                mediaToDelete.push({ urlOrPath: rLesson.subtitle_url || rLesson.subtitle_path, folder: "subtitles" });
               }
             }
 
@@ -395,10 +398,10 @@ export class AdminService {
         for (const rModule of removedModules) {
           for (const rLesson of rModule.lessons) {
             if (rLesson.video_url || rLesson.video_path) {
-              safeDeleteR2Media(rLesson.video_url || rLesson.video_path, "videos");
+              mediaToDelete.push({ urlOrPath: rLesson.video_url || rLesson.video_path, folder: "videos" });
             }
             if (rLesson.pdf_url || rLesson.pdf_path) {
-              safeDeleteR2Media(rLesson.pdf_url || rLesson.pdf_path, "documents");
+              mediaToDelete.push({ urlOrPath: rLesson.pdf_url || rLesson.pdf_path, folder: "documents" });
             }
           }
         }
@@ -419,7 +422,20 @@ export class AdminService {
       }
 
       return course;
+    }, {
+      maxWait: 20000,
+      timeout: 60000,
     });
+
+    if (mediaToDelete.length > 0) {
+      Promise.allSettled(
+        mediaToDelete.map((m) => safeDeleteR2Media(m.urlOrPath, m.folder))
+      ).catch((err) => {
+        console.warn("[Cloudflare R2 Cleanup] Background cleanup warning:", err.message);
+      });
+    }
+
+    return course;
   }
 
   static async deleteCourse(courseId) {
@@ -842,6 +858,192 @@ export class AdminService {
 
     return { payments: paginated, total };
   }
-}
 
+  // ==========================================
+  // Data Backup & Storage Management
+  // ==========================================
+  static async getFullBackupData() {
+    const [
+      users,
+      courses,
+      enrollments,
+      payments,
+      coupons,
+      testimonials,
+      progress,
+    ] = await Promise.all([
+      prisma.user.findMany({
+        select: {
+          id: true,
+          email: true,
+          full_name: true,
+          first_name: true,
+          last_name: true,
+          username: true,
+          phone: true,
+          role: true,
+          goal: true,
+          is_verified: true,
+          onboarded: true,
+          avatar_url: true,
+          auth_provider: true,
+          created_at: true,
+          updated_at: true,
+        },
+      }),
+      prisma.course.findMany({
+        include: {
+          modules: {
+            orderBy: { sort_order: "asc" },
+            include: {
+              lessons: {
+                orderBy: { sort_order: "asc" },
+              },
+            },
+          },
+        },
+      }),
+      prisma.enrollment.findMany(),
+      prisma.payment.findMany(),
+      prisma.coupon.findMany({
+        include: {
+          redemptions: true,
+        },
+      }),
+      prisma.testimonial.findMany(),
+      prisma.lessonProgress.findMany(),
+    ]);
+
+    const totalLessons = courses.reduce(
+      (sum, c) => sum + (c.modules || []).reduce((mSum, m) => mSum + (m.lessons?.length || 0), 0),
+      0
+    );
+
+    const summary = {
+      totalUsers: users.length,
+      totalCourses: courses.length,
+      totalModules: courses.reduce((sum, c) => sum + (c.modules?.length || 0), 0),
+      totalLessons,
+      totalEnrollments: enrollments.length,
+      totalPayments: payments.length,
+      totalCoupons: coupons.length,
+      totalTestimonials: testimonials.length,
+      totalProgressRecords: progress.length,
+    };
+
+    return {
+      version: "1.0",
+      app: "ArchitectureNext / SkillSpring",
+      createdAt: new Date().toISOString(),
+      summary,
+      data: {
+        users,
+        courses,
+        enrollments,
+        payments,
+        coupons,
+        testimonials,
+        progress,
+      },
+    };
+  }
+
+  static getBackupDir() {
+    const backupDir = path.resolve(process.cwd(), "backups");
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    return backupDir;
+  }
+
+  static async createAndStoreBackup() {
+    const backupData = await AdminService.getFullBackupData();
+    const backupDir = AdminService.getBackupDir();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const filename = `backup_${dateStr}.json`;
+    const filePath = path.join(backupDir, filename);
+
+    const jsonString = JSON.stringify(backupData, null, 2);
+    fs.writeFileSync(filePath, jsonString, "utf-8");
+    const stat = fs.statSync(filePath);
+
+    return {
+      filename,
+      size: stat.size,
+      createdAt: now.toISOString(),
+      summary: backupData.summary,
+    };
+  }
+
+  static async listStoredBackups() {
+    const backupDir = AdminService.getBackupDir();
+    const files = fs.readdirSync(backupDir).filter((f) => f.endsWith(".json"));
+
+    const backups = files.map((filename) => {
+      const filePath = path.join(backupDir, filename);
+      const stat = fs.statSync(filePath);
+      let summary = null;
+      try {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        const parsed = JSON.parse(raw);
+        summary = parsed.summary || null;
+      } catch (_) {}
+
+      return {
+        filename,
+        size: stat.size,
+        createdAt: stat.birthtime || stat.mtime,
+        summary,
+      };
+    });
+
+    backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const [
+      totalUsers,
+      totalCourses,
+      totalEnrollments,
+      totalPayments,
+      totalCoupons,
+      totalTestimonials,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.course.count(),
+      prisma.enrollment.count(),
+      prisma.payment.count(),
+      prisma.coupon.count(),
+      prisma.testimonial.count(),
+    ]);
+
+    return {
+      backups,
+      liveSummary: {
+        totalUsers,
+        totalCourses,
+        totalEnrollments,
+        totalPayments,
+        totalCoupons,
+        totalTestimonials,
+      },
+    };
+  }
+
+  static getBackupFilePath(filename) {
+    const safeFilename = path.basename(filename);
+    const backupDir = AdminService.getBackupDir();
+    const filePath = path.join(backupDir, safeFilename);
+    if (!fs.existsSync(filePath)) {
+      throw new Error("Backup file not found");
+    }
+    return filePath;
+  }
+
+  static deleteStoredBackup(filename) {
+    const filePath = AdminService.getBackupFilePath(filename);
+    fs.unlinkSync(filePath);
+    return true;
+  }
+}
 
