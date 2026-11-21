@@ -90,8 +90,8 @@ export class CourseController {
 
   static async getEnrollmentCount(req, res, next) {
     try {
-      const count = await CourseService.getPublicEnrollmentCount();
-      return successResponse(res, { count });
+      const stats = await CourseService.getPublicEnrollmentStats();
+      return successResponse(res, stats);
     } catch (err) {
       next(err);
     }

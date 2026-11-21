@@ -421,8 +421,50 @@ export class CourseService {
   }
 
   static async getPublicEnrollmentCount() {
+    const stats = await this.getPublicEnrollmentStats();
+    return stats.count;
+  }
+
+  static async getPublicEnrollmentStats() {
     const count = await prisma.enrollment.count({ where: { status: "ACTIVE" } });
     const baseOffset = 100;
-    return baseOffset + count;
+
+    // Fetch real latest active enrollments (exclude admins)
+    let studentNames = [];
+    try {
+      const recent = await prisma.enrollment.findMany({
+        where: {
+          status: "ACTIVE",
+          user: {
+            role: { not: "admin" },
+          },
+        },
+        include: {
+          user: {
+            select: {
+              first_name: true,
+              full_name: true,
+            },
+          },
+        },
+        orderBy: { enrolled_at: "desc" },
+        take: 10,
+      });
+
+      studentNames = recent
+        .map((e) => (e.user?.first_name || e.user?.full_name || "").trim().split(/\s+/)[0])
+        .filter(Boolean);
+    } catch (_) {}
+
+    if (studentNames.length === 0) {
+      studentNames = ["Dini", "Ramees", "Malu", "Ansar", "Shahul", "Imayavarman", "Viswa"];
+    }
+
+    return {
+      count: baseOffset + count,
+      activeCount: count,
+      recentStudents: studentNames,
+      latestStudent: studentNames[0] || "Dini",
+    };
   }
 }
