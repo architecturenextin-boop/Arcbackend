@@ -441,6 +441,19 @@ export class CourseService {
     const count = totalRegisteredUsers || activeEnrollments || 96;
     const baseOffset = 100;
 
+    // Helper to extract clean capitalized first name
+    const extractName = (u) => {
+      if (!u) return "";
+      let val = (u.first_name || u.full_name || u.username || "").trim();
+      if (!val) return "";
+      if (val.includes("@")) {
+        val = val.split("@")[0];
+      }
+      const first = val.split(/\s+/)[0];
+      if (!first) return "";
+      return first.charAt(0).toUpperCase() + first.slice(1);
+    };
+
     // Fetch real latest active enrollments and newest logins/signups (exclude admins)
     let studentNames = [];
     try {
@@ -457,11 +470,12 @@ export class CourseService {
               select: {
                 first_name: true,
                 full_name: true,
+                username: true,
               },
             },
           },
           orderBy: { enrolled_at: "desc" },
-          take: 10,
+          take: 25,
         }),
         prisma.user.findMany({
           where: {
@@ -470,26 +484,22 @@ export class CourseService {
           select: {
             first_name: true,
             full_name: true,
+            username: true,
           },
           orderBy: { updated_at: "desc" },
-          take: 5,
+          take: 25,
         }),
       ]);
 
-      const loginNames = recentLogins
-        .map((u) => (u.first_name || u.full_name || "").trim().split(/\s+/)[0])
-        .filter(Boolean);
-
-      const enrolledNames = recentEnrollments
-        .map((e) => (e.user?.first_name || e.user?.full_name || "").trim().split(/\s+/)[0])
-        .filter(Boolean);
+      const loginNames = recentLogins.map(extractName).filter(Boolean);
+      const enrolledNames = recentEnrollments.map((e) => extractName(e.user)).filter(Boolean);
 
       // New login users show first, followed by enrolled students
       const merged = [];
       const seen = new Set();
       for (const name of [...loginNames, ...enrolledNames]) {
         const lower = name.toLowerCase();
-        if (!seen.has(lower) && lower !== "admin") {
+        if (!seen.has(lower) && lower !== "admin" && lower !== "learner") {
           seen.add(lower);
           merged.push(name);
         }
@@ -498,14 +508,15 @@ export class CourseService {
     } catch (_) {}
 
     if (studentNames.length === 0) {
-      studentNames = ["Dini", "Ramees", "Malu", "Ansar", "Shahul", "Imayavarman", "Viswa"];
+      studentNames = ["Ramees", "Dini", "Malu", "Ansar", "Shahul", "Imayavarman", "Viswa"];
     }
 
     return {
       count: baseOffset + count,
       activeCount: count,
+      totalRegisteredCount: count,
       recentStudents: studentNames,
-      latestStudent: studentNames[0] || "Dini",
+      latestStudent: studentNames[0] || "Ramees",
     };
   }
 }
