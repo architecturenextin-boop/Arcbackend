@@ -429,31 +429,60 @@ export class CourseService {
     const count = await prisma.enrollment.count({ where: { status: "ACTIVE" } });
     const baseOffset = 100;
 
-    // Fetch real latest active enrollments (exclude admins)
+    // Fetch real latest active enrollments and newest logins/signups (exclude admins)
     let studentNames = [];
     try {
-      const recent = await prisma.enrollment.findMany({
-        where: {
-          status: "ACTIVE",
-          user: {
-            role: { not: "admin" },
-          },
-        },
-        include: {
-          user: {
-            select: {
-              first_name: true,
-              full_name: true,
+      const [recentEnrollments, recentLogins] = await Promise.all([
+        prisma.enrollment.findMany({
+          where: {
+            status: "ACTIVE",
+            user: {
+              role: { not: "admin" },
             },
           },
-        },
-        orderBy: { enrolled_at: "desc" },
-        take: 10,
-      });
+          include: {
+            user: {
+              select: {
+                first_name: true,
+                full_name: true,
+              },
+            },
+          },
+          orderBy: { enrolled_at: "desc" },
+          take: 10,
+        }),
+        prisma.user.findMany({
+          where: {
+            role: { not: "admin" },
+          },
+          select: {
+            first_name: true,
+            full_name: true,
+          },
+          orderBy: { updated_at: "desc" },
+          take: 5,
+        }),
+      ]);
 
-      studentNames = recent
+      const loginNames = recentLogins
+        .map((u) => (u.first_name || u.full_name || "").trim().split(/\s+/)[0])
+        .filter(Boolean);
+
+      const enrolledNames = recentEnrollments
         .map((e) => (e.user?.first_name || e.user?.full_name || "").trim().split(/\s+/)[0])
         .filter(Boolean);
+
+      // New login users show first, followed by enrolled students
+      const merged = [];
+      const seen = new Set();
+      for (const name of [...loginNames, ...enrolledNames]) {
+        const lower = name.toLowerCase();
+        if (!seen.has(lower) && lower !== "admin") {
+          seen.add(lower);
+          merged.push(name);
+        }
+      }
+      studentNames = merged;
     } catch (_) {}
 
     if (studentNames.length === 0) {
