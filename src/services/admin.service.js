@@ -480,6 +480,19 @@ export class AdminService {
         progress: true,
         enrollments: {
           include: {
+            payment: {
+              select: {
+                id: true,
+                gateway: true,
+                amount: true,
+                originalAmount: true,
+                discountAmount: true,
+                finalAmount: true,
+                couponId: true,
+                couponCode: true,
+                status: true,
+              },
+            },
             course: {
               select: {
                 id: true,
@@ -501,24 +514,47 @@ export class AdminService {
 
     const users = await prisma.user.findMany(query);
 
-    const students = users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      first_name: u.first_name,
-      last_name: u.last_name,
-      full_name: u.full_name || u.email,
-      username: u.username,
-      phone: u.phone,
-      goal: u.goal,
-      role: u.role.toLowerCase(),
-      onboarded: u.onboarded,
-      avatar_url: u.avatar_url,
-      created_at: u.created_at,
-      updated_at: u.updated_at,
-      enrollments: u.enrollments,
-      progress: u.progress || [],
-      coursesCount: u.enrollments.length,
-    }));
+    const students = users.map((u) => {
+      const freeEnrollments = u.enrollments.filter(
+        (e) => !e.payment_id || !e.payment || e.payment.gateway === "manual" || (Number(e.payment.finalAmount) === 0)
+      );
+      const paidEnrollments = u.enrollments.filter(
+        (e) => e.payment && e.payment.gateway !== "manual" && Number(e.payment.finalAmount) > 0
+      );
+
+      const formattedEnrollments = u.enrollments.map((en) => {
+        const isManual = !en.payment_id || !en.payment || en.payment.gateway === "manual" || Number(en.payment.finalAmount) === 0;
+        return {
+          ...en,
+          isManual,
+          isFree: isManual,
+          isPaid: !isManual,
+        };
+      });
+
+      return {
+        id: u.id,
+        email: u.email,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        full_name: u.full_name || u.email,
+        username: u.username,
+        phone: u.phone,
+        goal: u.goal,
+        role: u.role.toLowerCase(),
+        onboarded: u.onboarded,
+        avatar_url: u.avatar_url,
+        created_at: u.created_at,
+        updated_at: u.updated_at,
+        enrollments: formattedEnrollments,
+        progress: u.progress || [],
+        coursesCount: u.enrollments.length,
+        freeCoursesCount: freeEnrollments.length,
+        paidCoursesCount: paidEnrollments.length,
+        hasFreeAccess: freeEnrollments.length > 0,
+        hasPaidAccess: paidEnrollments.length > 0,
+      };
+    });
 
     return { students, total };
   }
@@ -542,6 +578,19 @@ export class AdminService {
         updated_at: true,
         enrollments: {
           include: {
+            payment: {
+              select: {
+                id: true,
+                gateway: true,
+                amount: true,
+                originalAmount: true,
+                discountAmount: true,
+                finalAmount: true,
+                couponId: true,
+                couponCode: true,
+                status: true,
+              },
+            },
             course: {
               include: {
                 modules: {
@@ -610,14 +659,15 @@ export class AdminService {
   static async manualEnrollStudent({ userId, courseId }) {
     const course = await prisma.course.findUnique({ where: { id: courseId } });
 
-    // Create a tracked manual payment entry
+    // Create a tracked manual payment entry with 0 amount (Free / Admin Granted)
     const payment = await prisma.payment.create({
       data: {
         user_id: userId,
         course_id: courseId,
-        amount: course?.price || 0,
+        amount: 0,
         originalAmount: course?.original_price || course?.price || 0,
-        finalAmount: course?.price || 0,
+        discountAmount: course?.price || 0,
+        finalAmount: 0,
         currency: "INR",
         gateway: "manual",
         gateway_order_id: `MANUAL_${crypto.randomBytes(4).toString("hex").toUpperCase()}`,
@@ -646,6 +696,7 @@ export class AdminService {
         enrolled_at: new Date(),
       },
       include: {
+        payment: true,
         course: true,
       },
     });
@@ -795,55 +846,73 @@ export class AdminService {
       orderBy: { enrolled_at: "desc" },
     });
 
-    // 3. Format direct/manual enrollments
-    const manualFormatted = directEnrollments.map((e) => ({
-      id: `enrollment_${e.id}`,
-      user_id: e.user_id,
-      course_id: e.course_id,
-      amount: e.course?.price || 0,
-      originalAmount: e.course?.original_price || e.course?.price || 0,
-      discountAmount: 0,
-      finalAmount: e.course?.price || 0,
-      currency: "INR",
-      gateway: "manual",
-      gateway_order_id: `MANUAL_${e.id.substring(0, 8).toUpperCase()}`,
-      gateway_payment_id: null,
-      status: e.status === "ACTIVE" ? "completed" : e.status.toLowerCase(),
-      paid_at: e.enrolled_at || e.created_at,
-      created_at: e.enrolled_at || e.created_at,
-      studentName: e.user?.full_name || e.user?.email || "Learner",
-      studentEmail: e.user?.email || "No email",
-      studentPhone: e.user?.phone || "",
-      courseTitle: e.course?.title || "Course Access",
-      orderId: `MANUAL_${e.id.substring(0, 8).toUpperCase()}`,
-      paymentId: "Direct Enrollment",
-      couponCode: null,
-    }));
+    // 3. Format direct/manual enrollments (Always 100% Free)
+    const manualFormatted = directEnrollments.map((e) => {
+      const courseOriginal = e.course?.original_price || e.course?.price || 0;
+      return {
+        id: `enrollment_${e.id}`,
+        user_id: e.user_id,
+        course_id: e.course_id,
+        amount: 0,
+        originalAmount: courseOriginal,
+        discountAmount: courseOriginal,
+        finalAmount: 0,
+        currency: "INR",
+        gateway: "manual",
+        gateway_order_id: `MANUAL_${e.id.substring(0, 8).toUpperCase()}`,
+        gateway_payment_id: null,
+        status: e.status === "ACTIVE" ? "completed" : e.status.toLowerCase(),
+        paid_at: e.enrolled_at || e.created_at,
+        created_at: e.enrolled_at || e.created_at,
+        studentName: e.user?.full_name || e.user?.email || "Learner",
+        studentEmail: e.user?.email || "No email",
+        studentPhone: e.user?.phone || "",
+        courseTitle: e.course?.title || "Course Access",
+        orderId: `MANUAL_${e.id.substring(0, 8).toUpperCase()}`,
+        paymentId: "Direct Free Enrollment",
+        couponCode: null,
+        isManual: true,
+        isFree: true,
+        isCoupon: false,
+      };
+    });
 
     // 4. Format gateway payments
-    const gatewayFormatted = payments.map((p) => ({
-      id: p.id,
-      user_id: p.user_id,
-      course_id: p.course_id,
-      amount: p.finalAmount ?? p.amount,
-      originalAmount: p.originalAmount ?? p.course?.original_price ?? p.amount,
-      discountAmount: p.discountAmount ?? 0,
-      finalAmount: p.finalAmount ?? p.amount,
-      currency: p.currency || "INR",
-      gateway: p.gateway || "razorpay",
-      gateway_order_id: p.gateway_order_id,
-      gateway_payment_id: p.gateway_payment_id,
-      status: p.status ? p.status.toLowerCase() : "completed",
-      paid_at: p.paid_at || p.created_at,
-      created_at: p.created_at,
-      studentName: p.user?.full_name || p.user?.email || "Learner",
-      studentEmail: p.user?.email || "No email",
-      studentPhone: p.user?.phone || "",
-      courseTitle: p.course?.title || "Course Access",
-      orderId: p.gateway_order_id || p.id.substring(0, 12),
-      paymentId: p.gateway_payment_id || "",
-      couponCode: p.couponCode || p.coupon?.code || null,
-    }));
+    const gatewayFormatted = payments.map((p) => {
+      const isManual = p.gateway === "manual";
+      const isCoupon = Boolean(p.couponCode || p.coupon?.code || p.couponId);
+      const isFree = isManual || Number(p.finalAmount ?? p.amount) === 0;
+      const courseOriginal = p.originalAmount ?? p.course?.original_price ?? p.course?.price ?? p.amount;
+      const finalAmt = isManual ? 0 : (p.finalAmount ?? p.amount);
+      const discount = isManual ? courseOriginal : (p.discountAmount ?? (courseOriginal - finalAmt > 0 ? courseOriginal - finalAmt : 0));
+
+      return {
+        id: p.id,
+        user_id: p.user_id,
+        course_id: p.course_id,
+        amount: finalAmt,
+        originalAmount: courseOriginal,
+        discountAmount: discount,
+        finalAmount: finalAmt,
+        currency: p.currency || "INR",
+        gateway: p.gateway || "razorpay",
+        gateway_order_id: p.gateway_order_id,
+        gateway_payment_id: p.gateway_payment_id,
+        status: p.status ? p.status.toLowerCase() : "completed",
+        paid_at: p.paid_at || p.created_at,
+        created_at: p.created_at,
+        studentName: p.user?.full_name || p.user?.email || "Learner",
+        studentEmail: p.user?.email || "No email",
+        studentPhone: p.user?.phone || "",
+        courseTitle: p.course?.title || "Course Access",
+        orderId: p.gateway_order_id || p.id.substring(0, 12),
+        paymentId: isManual ? "Direct Free Enrollment" : (p.gateway_payment_id || ""),
+        couponCode: p.couponCode || p.coupon?.code || null,
+        isManual,
+        isFree,
+        isCoupon,
+      };
+    });
 
     // 5. Combine and sort by date descending
     const allCombined = [...gatewayFormatted, ...manualFormatted].sort(
