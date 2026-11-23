@@ -537,7 +537,7 @@ export class AdminService {
         email: u.email,
         first_name: u.first_name,
         last_name: u.last_name,
-        full_name: u.full_name || u.email,
+        full_name: u.full_name || [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || u.email,
         username: u.username,
         phone: u.phone,
         goal: u.goal,

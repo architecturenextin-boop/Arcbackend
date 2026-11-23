@@ -426,80 +426,122 @@ export class CourseService {
   }
 
   static async getPublicEnrollmentStats() {
-    let activeEnrollments = 69;
-    let totalRegisteredUsers = 96;
+    let activeEnrollments = 0;
+    let totalRegisteredUsers = 0;
+    let totalAllUsers = 0;
 
     try {
-      const [enrollCount, userCount] = await Promise.all([
+      const [enrollCount, userCount, allUserCount] = await Promise.all([
         prisma.enrollment.count({ where: { status: "ACTIVE" } }),
-        prisma.user.count({ where: { role: { not: "admin" } } }),
+        prisma.user.count({ where: { role: { not: "ADMIN" } } }),
+        prisma.user.count(),
       ]);
-      activeEnrollments = enrollCount || 69;
-      totalRegisteredUsers = userCount || 96;
-    } catch (_) {}
+      activeEnrollments = typeof enrollCount === "number" ? enrollCount : 0;
+      totalRegisteredUsers = typeof userCount === "number" ? userCount : 0;
+      totalAllUsers = typeof allUserCount === "number" ? allUserCount : 0;
+    } catch (err) {
+      console.error("[getPublicEnrollmentStats] Count error:", err);
+    }
 
-    const count = totalRegisteredUsers || activeEnrollments || 96;
+    const count = totalAllUsers > 0 ? totalAllUsers : (totalRegisteredUsers > 0 ? totalRegisteredUsers : 102);
     const baseOffset = 100;
 
-    // Helper to extract clean capitalized first name
-    const extractName = (u) => {
-      if (!u) return "";
-      let val = (u.first_name || u.full_name || u.username || "").trim();
-      if (!val) return "";
-      if (val.includes("@")) {
-        val = val.split("@")[0];
-      }
-      const first = val.split(/\s+/)[0];
-      if (!first) return "";
-      return first.charAt(0).toUpperCase() + first.slice(1);
-    };
-
-    // Fetch real latest active enrollments and newest logins/signups (exclude admins)
+    // Fetch real latest active enrollments and all recent & registered users (exclude admins)
     let studentNames = [];
     try {
-      const [recentEnrollments, recentLogins] = await Promise.all([
+      const [recentEnrollments, recentUsers] = await Promise.all([
         prisma.enrollment.findMany({
           where: {
             status: "ACTIVE",
             user: {
-              role: { not: "admin" },
+              role: { not: "ADMIN" },
             },
           },
           include: {
             user: {
               select: {
                 first_name: true,
+                last_name: true,
                 full_name: true,
                 username: true,
               },
             },
           },
           orderBy: { enrolled_at: "desc" },
-          take: 25,
+          take: 30,
         }),
         prisma.user.findMany({
           where: {
-            role: { not: "admin" },
+            role: { not: "ADMIN" },
           },
           select: {
             first_name: true,
+            last_name: true,
             full_name: true,
             username: true,
+            created_at: true,
           },
-          orderBy: { updated_at: "desc" },
-          take: 25,
+          orderBy: { created_at: "desc" },
+          take: 30,
         }),
       ]);
 
-      const loginNames = recentLogins.map(extractName).filter(Boolean);
-      const enrolledNames = recentEnrollments.map((e) => extractName(e.user)).filter(Boolean);
+      const userEntries = recentUsers
+        .map((u) => ({
+          name: (u.first_name || u.full_name || u.username || "").trim().split(/\s+/)[0],
+          time: u.created_at ? new Date(u.created_at).getTime() : 0,
+        }))
+        .filter((i) => i.name && i.name.toLowerCase() !== "admin" && i.name.toLowerCase() !== "learner");
 
-      // New login users show first, followed by enrolled students
+      const enrolledEntries = recentEnrollments
+        .map((e) => ({
+          name: (e.user?.first_name || e.user?.full_name || e.user?.username || "").trim().split(/\s+/)[0],
+          time: e.enrolled_at ? new Date(e.enrolled_at).getTime() : 0,
+        }))
+        .filter((i) => i.name && i.name.toLowerCase() !== "admin" && i.name.toLowerCase() !== "learner");
+
+      // Sort real students by latest timestamp descending so newest student is always at index 0
+      const sortedRealStudents = [...enrolledEntries, ...userEntries].sort((a, b) => b.time - a.time);
+
+      // Diverse learners fallback list
+      const fallbackList = [
+        "Mohamed",
+        "Ramees",
+        "Dini",
+        "Malu",
+        "Ansar",
+        "Shahul",
+        "Imayavarman",
+        "Viswa",
+        "Fasalu",
+        "Nandhana",
+        "Aparna",
+        "Arun",
+        "Jithin",
+        "Sneha",
+        "Rahul",
+        "Devika",
+        "Kavya",
+        "Sreerag",
+        "Bilal",
+        "Fathima",
+      ];
+
       const merged = [];
       const seen = new Set();
-      for (const name of [...loginNames, ...enrolledNames]) {
+      // First, add all actual real students from the database
+      for (const item of sortedRealStudents) {
+        const lower = item.name.toLowerCase();
+        if (!seen.has(lower) && lower !== "admin" && lower !== "learner" && lower !== "unknown") {
+          seen.add(lower);
+          merged.push(item.name);
+        }
+      }
+
+      // Then add fallback names to ensure deep, continuous rotation
+      for (const name of fallbackList) {
         const lower = name.toLowerCase();
-        if (!seen.has(lower) && lower !== "admin" && lower !== "learner") {
+        if (!seen.has(lower)) {
           seen.add(lower);
           merged.push(name);
         }
@@ -508,15 +550,33 @@ export class CourseService {
     } catch (_) {}
 
     if (studentNames.length === 0) {
-      studentNames = ["Ramees", "Dini", "Malu", "Ansar", "Shahul", "Imayavarman", "Viswa"];
+      studentNames = [
+        "Mohamed",
+        "Ramees",
+        "Dini",
+        "Malu",
+        "Ansar",
+        "Shahul",
+        "Imayavarman",
+        "Viswa",
+        "Fasalu",
+        "Nandhana",
+        "Aparna",
+        "Arun",
+        "Jithin",
+        "Sneha",
+        "Rahul",
+      ];
     }
 
     return {
-      count: baseOffset + count,
+      count: count,
       activeCount: count,
       totalRegisteredCount: count,
+      totalAllUsers: totalAllUsers || count,
+      activeEnrollments: activeEnrollments,
       recentStudents: studentNames,
-      latestStudent: studentNames[0] || "Ramees",
+      latestStudent: studentNames[0] || "elsa",
     };
   }
 }
