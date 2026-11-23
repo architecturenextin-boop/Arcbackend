@@ -1,7 +1,8 @@
-﻿import express from "express";
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import compression from "compression";
 import apiRoutes from "./routes/index.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { config } from "./config/env.js";
@@ -97,6 +98,19 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   optionsSuccessStatus: 200,
+}));
+
+// Enable HTTP compression for text and JSON responses
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) return false;
+    const contentType = res.getHeader("Content-Type");
+    if (contentType && (contentType.includes("video") || contentType.includes("event-stream") || contentType.includes("image/"))) {
+      return false;
+    }
+    return compression.filter(req, res);
+  },
+  threshold: 1024,
 }));
 
 // Enable pre-flight for all routes

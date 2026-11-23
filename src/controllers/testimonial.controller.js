@@ -1,5 +1,6 @@
 import { testimonialService } from "../services/testimonial.service.js";
 import { successResponse, errorResponse } from "../utils/response.js";
+import { memoryCache } from "../utils/memory-cache.js";
 
 export const testimonialController = {
   /**
@@ -9,7 +10,19 @@ export const testimonialController = {
   async getPublicTestimonials(req, res, next) {
     try {
       const { courseId, limit } = req.query;
+      const cacheKey = `public:testimonials:${courseId || "all"}:${limit || 50}`;
+
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+
+      const cached = memoryCache.get(cacheKey);
+      if (cached) {
+        res.setHeader("x-cache", "HIT");
+        return successResponse(res, cached, "Approved testimonials retrieved successfully");
+      }
+
+      res.setHeader("x-cache", "MISS");
       const data = await testimonialService.getPublicTestimonials({ courseId, limit });
+      memoryCache.set(cacheKey, data, 300);
       return successResponse(res, data, "Approved testimonials retrieved successfully");
     } catch (err) {
       next(err);
@@ -81,6 +94,7 @@ export const testimonialController = {
   async approveTestimonial(req, res, next) {
     try {
       const data = await testimonialService.approveTestimonial(req.params.id);
+      memoryCache.deletePattern("public:testimonials");
       return successResponse(res, data, "Testimonial approved successfully");
     } catch (err) {
       next(err);
@@ -95,6 +109,7 @@ export const testimonialController = {
     try {
       const { adminNote } = req.body;
       const data = await testimonialService.rejectTestimonial(req.params.id, adminNote);
+      memoryCache.deletePattern("public:testimonials");
       return successResponse(res, data, "Testimonial rejected successfully");
     } catch (err) {
       next(err);
@@ -108,6 +123,7 @@ export const testimonialController = {
   async deleteAdminTestimonial(req, res, next) {
     try {
       const data = await testimonialService.deleteAdminTestimonial(req.params.id);
+      memoryCache.deletePattern("public:testimonials");
       return successResponse(res, data, "Testimonial deleted successfully");
     } catch (err) {
       next(err);

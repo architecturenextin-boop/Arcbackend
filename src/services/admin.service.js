@@ -3,6 +3,7 @@ import crypto from "crypto";
 import path from "path";
 import { prisma } from "../config/db.js";
 import { r2Service } from "./r2.service.js";
+import { memoryCache } from "../utils/memory-cache.js";
 
 /**
  * Extracts the canonical Cloudflare R2 object key from any media URL or database path.
@@ -195,6 +196,8 @@ export class AdminService {
   }
 
   static async upsertCourse({ courseData, modulesData }) {
+    memoryCache.deletePattern("public:courses");
+    memoryCache.deletePattern("public:course:");
     const courseId = courseData.id || crypto.randomUUID();
     const courseSlug =
       courseData.slug ||
@@ -439,6 +442,9 @@ export class AdminService {
   }
 
   static async deleteCourse(courseId) {
+    memoryCache.deletePattern("public:courses");
+    memoryCache.deletePattern("public:course:");
+    memoryCache.deletePattern("public:enrollment-stats");
     // 1. Fetch all lessons and attachments in this course to clean up from Cloudflare R2
     const lessonsInCourse = await prisma.courseLesson.findMany({
       where: {
@@ -636,6 +642,7 @@ export class AdminService {
 
 
   static async revokeStudentEnrollment({ userId, courseId, enrollmentId }) {
+    memoryCache.deletePattern("public:enrollment-stats");
     if (enrollmentId) {
       return await prisma.enrollment.delete({
         where: { id: enrollmentId },
@@ -701,6 +708,7 @@ export class AdminService {
       },
     });
 
+    memoryCache.deletePattern("public:enrollment-stats");
     return enrollment;
   }
 

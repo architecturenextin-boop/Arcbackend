@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { prisma } from "../config/db.js";
 import { config } from "../config/env.js";
 import { CouponService } from "./coupon.service.js";
+import { memoryCache } from "../utils/memory-cache.js";
 
 function razorpayAuthorization(keyId, keySecret) {
   return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
@@ -121,6 +122,8 @@ export class PaymentService {
 
         return payment;
       });
+
+      memoryCache.deletePattern("public:enrollment-stats");
 
       return {
         free: true,
@@ -329,6 +332,7 @@ export class PaymentService {
       }
     });
 
+    memoryCache.deletePattern("public:enrollment-stats");
     return { success: true, paymentId: payment.id, courseId: payment.course_id };
   }
 
@@ -456,6 +460,7 @@ export class PaymentService {
         }
       });
 
+      memoryCache.deletePattern("public:enrollment-stats");
       console.log(`[Webhook Success] User ${payment.user_id} enrolled in course ${payment.course_id} via webhook`);
       return { processed: true };
     }
