@@ -368,14 +368,6 @@ export class AuthService {
 
     const token = signToken({ userId: user.id, role: user.role });
 
-    // Update user's updated_at timestamp so recent login appears immediately in the learning family stream
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { updated_at: new Date() },
-      });
-    } catch (_) {}
-
     const sanitizedUser = {
       id: user.id,
       email: user.email,
@@ -532,14 +524,6 @@ export class AuthService {
     }
 
     const token = signToken({ userId: user.id, role: user.role });
-
-    // Update user's updated_at timestamp so recent login appears immediately in the learning family stream
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { updated_at: new Date() },
-      });
-    } catch (_) {}
 
     const sanitizedUser = {
       id: user.id,
